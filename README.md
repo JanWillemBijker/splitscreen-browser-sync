@@ -1,6 +1,6 @@
 # SplitScreen Browser Sync
 
-Version: 1.6.0
+Version: 1.0.0
 
 Manifest V3 Chrome Extension for pixel-perfect scroll sync between two tabs in Chrome native Split View.
 
@@ -20,20 +20,20 @@ Manifest V3 Chrome Extension for pixel-perfect scroll sync between two tabs in C
 - Optionally mirrors interactive clicks between panes, including closing overlays by clicking outside them.
 - Optionally mirrors hover effects (CSS `:hover` styling and JS-driven hover menus) between panes.
 
-## Changes in 1.6.0
+## Changes in 0.4
 
 - New app icon: a green-to-cyan gradient rounded square with a white sync motif (replaces the old dark panels icon; all PNG sizes regenerated from the SVG).
 - The on-page floating button now matches the icon: a gradient rounded-square tile with the sync glyph and a soft shadow, so it visually connects with the toolbar icon.
 - Shifted the extension's green accent toward `#3CDE95` (mint). Solid "synced" buttons use the brighter mint with dark text for contrast; outline/focus/toggle accents follow the same hue.
 - Updated remaining in-app labels to the new name (SplitScreen Browser Sync).
 
-## Changes in 1.5.0
+## Changes in 0.3
 
 - Renamed the extension to **SplitScreen Browser Sync**.
 - The toolbar popup can now set the per-group **defaults for new sessions**: Hide WordPress admin bar, Sync navigation, Mirror clicks, and Mirror hover effects. These apply to each newly created split screen pairing; the current split is still changed from its on-page panel.
 - Removed the **Reload active** and **Hard reload active** buttons from the on-page panel (the per-side Reload left/right and Hard reload left/right buttons remain).
 
-## Changes in 1.4.0
+## Changes in 0.2
 
 - Reworked click mirroring so it is far more reliable across themes and page builders:
   - Mirrors every left click, not only a fixed list of selectors.
@@ -44,7 +44,7 @@ Manifest V3 Chrome Extension for pixel-perfect scroll sync between two tabs in C
 - Added **Mirror hover effects** (per group, default off): reproduces CSS `:hover` styling and JS-driven hover menus on the other pane.
 - Loop prevention is now structural via `event.isTrusted`, so synthetic mirrored events can never bounce back.
 
-## Changes in 1.2.0
+## Changes in 0.1
 
 - Cleaner floating popup UI.
 - Removed visible technical details such as Split View ID and pair/debug information.
