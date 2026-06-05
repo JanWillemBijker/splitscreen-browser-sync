@@ -1,0 +1,13 @@
+/*
+  The visible UI is created inside a Shadow DOM by content.js.
+  Keep this file intentionally minimal so the host node never shows
+  anything before the background has confirmed a valid Split View pair.
+*/
+#svss-root {
+  all: initial !important;
+  position: fixed !important;
+  bottom: 18px !important;
+  left: 18px !important;
+  z-index: 2147483647 !important;
+  font-family: "Roboto Flex", Roboto, Arial, sans-serif !important;
+}
