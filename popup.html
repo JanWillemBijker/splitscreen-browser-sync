@@ -38,7 +38,13 @@
         </div>
       </div>
 
+      <div class="suggest" id="suggestion" hidden>
+        <p class="suggest-text"><strong id="suggestionLabel"></strong> <span id="suggestionPair"></span></p>
+        <p class="suggest-why" data-i18n="suggestWhy"></p>
+      </div>
+
       <button id="syncToggle" type="button" class="btn btn-primary" hidden></button>
+      <button id="suggestionNever" type="button" class="link-button suggest-never" data-i18n="suggestNever" hidden></button>
     </section>
 
     <div class="tabs" role="tablist" data-i18n-aria="tabsLabel">
@@ -368,6 +374,23 @@
           </div>
           <button type="button" class="link-button link-danger-inline" id="clearHistory" data-i18n="btnClearHistory"></button>
           <p class="result-line" id="clearHistoryResult" role="status" aria-live="polite"></p>
+        </div>
+
+        <div class="group">
+          <div class="group-head">
+            <h2 class="group-title" data-i18n="sectionSuggest"></h2>
+          </div>
+          <div class="options">
+            <label class="option">
+              <span class="option-text">
+                <span class="option-label" data-i18n="optSuggest"></span>
+                <span class="option-help" data-i18n="optSuggestHelp"></span>
+              </span>
+              <input id="suggestSync" type="checkbox" class="switch">
+            </label>
+          </div>
+          <button type="button" class="link-button" id="suggestReset" data-i18n="btnSuggestReset"></button>
+          <p class="result-line" id="suggestResetResult" role="status" aria-live="polite"></p>
         </div>
 
         <div class="group">

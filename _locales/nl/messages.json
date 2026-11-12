@@ -644,5 +644,38 @@
   },
   "badgeReloading": {
     "message": "Gesynchroniseerd · een helft herlaadt"
+  },
+  "suggestTitle": {
+    "message": "Sync starten?"
+  },
+  "suggestStart": {
+    "message": "Start"
+  },
+  "suggestDismiss": {
+    "message": "Niet nu"
+  },
+  "suggestNever": {
+    "message": "Niet meer voorstellen voor dit paar"
+  },
+  "suggestPopupLabel": {
+    "message": "Voorstel:"
+  },
+  "suggestWhy": {
+    "message": "Lijkt op twee versies van dezelfde site."
+  },
+  "sectionSuggest": {
+    "message": "Voorstellen"
+  },
+  "optSuggest": {
+    "message": "Sync voorstellen"
+  },
+  "optSuggestHelp": {
+    "message": "Stelt voor de sync te starten als beide helften op twee versies van één site lijken (dezelfde pagina, of live en staging). Start nooit vanzelf."
+  },
+  "btnSuggestReset": {
+    "message": "Weggeklikte paren weer voorstellen"
+  },
+  "suggestResetDone": {
+    "message": "Weggeklikte paren worden weer voorgesteld."
   }
 }

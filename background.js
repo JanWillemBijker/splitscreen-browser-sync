@@ -119,7 +119,10 @@ const MSG = Object.freeze({
   POPUP_CHECKLIST_REMOVE: 'SVSS_POPUP_CHECKLIST_REMOVE',
   POPUP_CHECKLIST_CLEAR: 'SVSS_POPUP_CHECKLIST_CLEAR',
   POPUP_CHECKLIST_GO: 'SVSS_POPUP_CHECKLIST_GO',
-  REMOTE_FIELD_INPUT: 'SVSS_REMOTE_FIELD_INPUT'
+  REMOTE_FIELD_INPUT: 'SVSS_REMOTE_FIELD_INPUT',
+  POPUP_SUGGEST_DISMISS: 'SVSS_POPUP_SUGGEST_DISMISS',
+  POPUP_SET_SUGGEST: 'SVSS_POPUP_SET_SUGGEST',
+  POPUP_SUGGEST_RESET: 'SVSS_POPUP_SUGGEST_RESET'
 });
 
 const CMD = Object.freeze({
@@ -147,7 +150,8 @@ const CMD = Object.freeze({
   CHECKLIST_MARK: 'CHECKLIST_MARK',
   OVERLAY_SET: 'OVERLAY_SET',
   OVERLAY_REFRESH: 'OVERLAY_REFRESH',
-  INSPECT_SET: 'INSPECT_SET'
+  INSPECT_SET: 'INSPECT_SET',
+  SUGGEST_DISMISS: 'SUGGEST_DISMISS'
 });
 
 // Panel commands that set one of EXTRA_BOOL_OPTIONS / CHOICE_OPTIONS.
@@ -204,6 +208,7 @@ const GESTURE_REQUIRED_COMMANDS = new Set([
   CMD.OVERLAY_SET,
   CMD.OVERLAY_REFRESH,
   CMD.INSPECT_SET,
+  CMD.SUGGEST_DISMISS,
   ...Object.keys(OPTION_COMMANDS)
 ]);
 
@@ -307,6 +312,7 @@ function normalizeSettings(raw) {
   return {
     alwaysShowButtonOnSplitScreen: boolOr(settings.alwaysShowButtonOnSplitScreen, DEFAULT_ALWAYS_SHOW_BUTTON),
     rememberPairs: boolOr(settings.rememberPairs, true),
+    suggestSync: boolOr(settings.suggestSync, true),
     defaultHideWpAdminBar: boolOr(settings.defaultHideWpAdminBar, DEFAULT_HIDE_WP_ADMIN_BAR),
     defaultSyncNavigation: boolOr(settings.defaultSyncNavigation, DEFAULT_SYNC_NAVIGATION),
     defaultMirrorClicks: boolOr(settings.defaultMirrorClicks, DEFAULT_MIRROR_CLICKS),
@@ -655,7 +661,7 @@ function buildHiddenState(reason = 'Current tab is not in a split screen.') {
   };
 }
 
-function buildUiStateForTab(group, tabId, show = true) {
+function buildUiStateForTab(group, tabId, show = true, suggestion = null) {
   const enabled = Boolean(group.enabled);
   const reloading = Boolean(group.isReloadingTabs && group.isReloadingTabs[String(tabId)]);
   const hasOffset = Number(group.offsetX || 0) !== 0 || Number(group.offsetY || 0) !== 0;
@@ -703,7 +709,8 @@ function buildUiStateForTab(group, tabId, show = true) {
     color,
     statusText,
     reloading,
-    pauseReason: enabled ? null : (group.pauseReason || null)
+    pauseReason: enabled ? null : (group.pauseReason || null),
+    suggestion: suggestion || null
   };
 }
 
@@ -789,6 +796,156 @@ function clearTabBadge(tabId) {
   setTabBadge(tabId, null, '').catch(() => undefined);
 }
 
+// ---- Sync suggestion ---------------------------------------------------------
+// When a pair is not syncing and the two panes look like two versions of one
+// site, the on-page UI and the popup offer to start sync. Never starts by
+// itself: Start goes through the normal (user gesture) start path. Decided
+// locally from the two tab URLs; nothing is stored except dismissed pairs of
+// origins (chrome.storage.local, capped).
+const SUGGEST_DISMISSED_KEY = 'svssSuggestDismissed';
+const MAX_SUGGEST_DISMISSED = 200;
+// Leading host labels (and dash-separated parts of the first label) that mark
+// an environment rather than the site itself.
+const ENV_LABELS = new Set([
+  'www', 'staging', 'stage', 'stg', 'test', 'tst', 'testing', 'dev', 'develop', 'development',
+  'acc', 'acceptance', 'acceptatie', 'accept', 'uat', 'qa', 'preview', 'prev', 'preprod', 'pre',
+  'prod', 'production', 'live', 'beta', 'demo', 'sandbox', 'local', 'new', 'old', 'next', 'review'
+]);
+// Two-label public suffixes and hosting platforms where the site name is the
+// label before them (site.co.uk, site.netlify.app, staging.site.ddev.site).
+const MULTI_LABEL_SUFFIXES = new Set([
+  'co.uk', 'org.uk', 'ac.uk', 'gov.uk', 'com.au', 'net.au', 'org.au', 'co.nz', 'com.br', 'com.mx',
+  'co.za', 'co.jp', 'com.tr', 'com.pl', 'com.es', 'com.ar', 'co.in', 'com.cn', 'co.kr', 'com.sg',
+  'com.hk', 'co.at', 'or.at', 'co.il', 'com.be',
+  'github.io', 'gitlab.io', 'netlify.app', 'vercel.app', 'pages.dev', 'workers.dev', 'herokuapp.com',
+  'web.app', 'firebaseapp.com', 'onrender.com', 'fly.dev', 'azurewebsites.net', 'wpengine.com',
+  'wpenginepowered.com', 'kinsta.cloud', 'myshopify.com', 'wordpress.com', 'ddev.site', 'lndo.site',
+  'ngrok.io', 'ngrok.app', 'ngrok-free.app', 'local.test'
+]);
+
+let suggestDismissedCache = null;
+
+async function getSuggestDismissed() {
+  if (suggestDismissedCache) return suggestDismissedCache;
+  let list = [];
+  try {
+    const stored = await chrome.storage.local.get(SUGGEST_DISMISSED_KEY);
+    if (Array.isArray(stored[SUGGEST_DISMISSED_KEY])) {
+      list = stored[SUGGEST_DISMISSED_KEY].filter((key) => typeof key === 'string' && key.length <= 600);
+    }
+  } catch (error) {
+    debug('Could not load dismissed suggestions', error);
+  }
+  if (!suggestDismissedCache) suggestDismissedCache = list.slice(-MAX_SUGGEST_DISMISSED);
+  return suggestDismissedCache;
+}
+
+async function saveSuggestDismissed(list) {
+  suggestDismissedCache = list.slice(-MAX_SUGGEST_DISMISSED);
+  try {
+    await chrome.storage.local.set({ [SUGGEST_DISMISSED_KEY]: suggestDismissedCache });
+  } catch (error) {
+    debug('Could not save dismissed suggestions', error);
+  }
+}
+
+// Order-independent key of a pair of origins.
+function originPairKey(originA, originB) {
+  return [originA, originB].sort().join(' ');
+}
+
+function isIpHostname(hostname) {
+  return /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname) || hostname.startsWith('[');
+}
+
+function siteNameOf(hostname) {
+  const labels = hostname.split('.').filter(Boolean);
+  if (labels.length < 2) return null;
+  const index = MULTI_LABEL_SUFFIXES.has(labels.slice(-2).join('.')) ? labels.length - 3 : labels.length - 2;
+  return index >= 0 ? labels[index] : null;
+}
+
+function withoutEnvPrefix(hostname) {
+  const labels = hostname.split('.');
+  while (labels.length > 2 && ENV_LABELS.has(labels[0])) labels.shift();
+  return labels.join('.');
+}
+
+// "site-staging" -> "site"; null when the first label has no environment part.
+function envFreeFirstLabel(hostname) {
+  const parts = hostname.split('.')[0].split(/-+/);
+  const kept = parts.filter((part) => part && !ENV_LABELS.has(part));
+  return kept.length && kept.length < parts.length ? kept.join('-') : null;
+}
+
+// True for live/staging-style variants: staging.site.nl ~ www.site.nl,
+// site.nl ~ site.test, site-staging.netlify.app ~ site.nl.
+function hostsLookRelated(a, b) {
+  if (!a || !b || a === b || isIpHostname(a) || isIpHostname(b)) return false;
+  if (withoutEnvPrefix(a) === withoutEnvPrefix(b)) return true;
+  const nameA = siteNameOf(a);
+  const nameB = siteNameOf(b);
+  if (nameA && nameA === nameB && nameA.length >= 2 && !ENV_LABELS.has(nameA)) return true;
+  const firstA = envFreeFirstLabel(a);
+  const firstB = envFreeFirstLabel(b);
+  return Boolean((firstA && (firstA === nameB || firstA === firstB)) || (firstB && firstB === nameA));
+}
+
+function comparablePath(url) {
+  const path = url.pathname.replace(/\/+$/, '');
+  return path || '/';
+}
+
+// { left, right } (hosts) when the two URLs look like two versions of one
+// site: same path (not just "/") on different origins, or related hosts.
+function evaluateSuggestion(leftUrl, rightUrl) {
+  if (!isNormalHttpUrl(leftUrl) || !isNormalHttpUrl(rightUrl)) return null;
+  let left;
+  let right;
+  try {
+    left = new URL(leftUrl);
+    right = new URL(rightUrl);
+  } catch (_error) {
+    return null;
+  }
+  if (left.origin === right.origin) return null;
+  const leftPath = comparablePath(left);
+  const samePath = leftPath === comparablePath(right) && leftPath !== '/';
+  const related = hostsLookRelated(left.hostname.toLowerCase(), right.hostname.toLowerCase());
+  if (!samePath && !related) return null;
+  return { left: left.host, right: right.host, key: originPairKey(left.origin, right.origin) };
+}
+
+// The suggestion for a pair, or null. `tabs` may pass already fetched tabs.
+async function suggestionFor(group, tabs = null) {
+  if (!group || group.enabled || group.error || group.pauseReason) return null;
+  const settings = await getSettings();
+  if (!settings.suggestSync) return null;
+  const [leftTab, rightTab] = tabs || await Promise.all([safeGetTab(group.leftTabId), safeGetTab(group.rightTabId)]);
+  const suggestion = evaluateSuggestion(leftTab?.url, rightTab?.url);
+  if (!suggestion) return null;
+  if (group.suggestDismissedKey === suggestion.key) return null;
+  if ((await getSuggestDismissed()).includes(suggestion.key)) return null;
+  return { left: suggestion.left, right: suggestion.right };
+}
+
+// forever: remember the pair of origins; otherwise only for this pair of tabs
+// in this session (until the panes show another pair of sites).
+async function dismissSuggestion(group, forever) {
+  if (!group) return;
+  const [leftTab, rightTab] = await Promise.all([safeGetTab(group.leftTabId), safeGetTab(group.rightTabId)]);
+  const suggestion = evaluateSuggestion(leftTab?.url, rightTab?.url);
+  if (!suggestion) return;
+  group.suggestDismissedKey = suggestion.key;
+  scheduleSaveState();
+  if (forever) {
+    const list = (await getSuggestDismissed()).filter((key) => key !== suggestion.key);
+    list.push(suggestion.key);
+    await saveSuggestDismissed(list);
+  }
+  await sendGroupState(group);
+}
+
 async function sendHiddenState(tabId, reason) {
   clearTabBadge(tabId);
   const hiddenState = buildHiddenState(reason);
@@ -810,9 +967,11 @@ async function sendGroupState(group, targetTabId = null) {
   const tabIds = targetTabId ? [targetTabId] : groupTabIds(group);
   const show = await shouldShowFloatingUi(group);
   await getChecklists();
+  const pairTabs = await Promise.all([safeGetTab(group.leftTabId), safeGetTab(group.rightTabId)]);
+  const suggestion = await suggestionFor(group, pairTabs);
 
   for (const tabId of tabIds) {
-    const tab = await safeGetTab(tabId);
+    const tab = pairTabs.find((candidate) => candidate?.id === tabId) || await safeGetTab(tabId);
     if (!tab || !isNormalHttpUrl(tab.url)) continue;
 
     const ok = await ensureContentScript(tabId);
@@ -820,7 +979,7 @@ async function sendGroupState(group, targetTabId = null) {
 
     await safeSendMessage(tabId, {
       type: MSG.STATE,
-      state: buildUiStateForTab(group, tabId, show)
+      state: buildUiStateForTab(group, tabId, show, suggestion)
     });
   }
 }
@@ -2112,6 +2271,8 @@ async function stopCurrentSplitView(tabId, windowId) {
   group.isReloadingTabs = {};
   if (group.overlay) group.overlay.on = false;
   group.inspect = false;
+  // Stopped on purpose: do not suggest starting again for these two sites.
+  if (group.pinnedLeftOrigin && group.pinnedRightOrigin) group.suggestDismissedKey = originPairKey(group.pinnedLeftOrigin, group.pinnedRightOrigin);
   await saveStateNow();
   await sendGroupState(group);
 }
@@ -2122,7 +2283,8 @@ async function stopAllSplitViews() {
   for (const group of Object.values(state.groups)) {
     group.enabled = false;
     if (group.overlay) group.overlay.on = false;
-  group.inspect = false;
+    group.inspect = false;
+    if (group.pinnedLeftOrigin && group.pinnedRightOrigin) group.suggestDismissedKey = originPairKey(group.pinnedLeftOrigin, group.pinnedRightOrigin);
     group.pauseReason = null;
     group.error = null;
     group.isReloadingTabs = {};
@@ -2776,7 +2938,7 @@ async function handleGetSplitStatusMessage(sender) {
   if (await reconcileReloading(group)) sendGroupState(group).catch(() => undefined);
 
   const show = await shouldShowFloatingUi(group);
-  const state = buildUiStateForTab(group, tabId, show);
+  const state = buildUiStateForTab(group, tabId, show, await suggestionFor(group));
   await safeSendMessage(tabId, { type: MSG.STATE, state });
   return state;
 }
@@ -2927,6 +3089,11 @@ async function handleUiCommand(sender, command, message = {}) {
     case CMD.SET_SHOW_CURSOR:
       await setGroupBooleanOption(tabId, windowId, 'showCursor', Boolean(message.value));
       break;
+    case CMD.SUGGEST_DISMISS: {
+      await scanWindow(windowId);
+      await dismissSuggestion(await getGroupForTab(tabId, windowId), message.forever === true);
+      break;
+    }
     default: {
       const option = Object.prototype.hasOwnProperty.call(OPTION_COMMANDS, command) ? OPTION_COMMANDS[command] : null;
       if (option?.kind === 'bool') await setGroupBooleanOption(tabId, windowId, option.field, Boolean(message.value));
@@ -3002,7 +3169,8 @@ async function getPopupStatus() {
     canShowCurrent: Boolean(group),
     buttonShownForCurrent,
     manualButtonOverride,
-    group: summarizeGroupForPopup(group)
+    group: summarizeGroupForPopup(group),
+    suggestion: group ? await suggestionFor(group) : null
   };
 }
 
@@ -3290,6 +3458,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     if (message.type === MSG.POPUP_GET_STATUS) {
+      sendResponse(await getPopupStatus());
+      return;
+    }
+
+    if (message.type === MSG.POPUP_SUGGEST_DISMISS) {
+      const { group } = await activeGroup();
+      if (group) await dismissSuggestion(group, message.forever === true);
+      sendResponse(await getPopupStatus());
+      return;
+    }
+
+    if (message.type === MSG.POPUP_SET_SUGGEST || message.type === MSG.POPUP_SUGGEST_RESET) {
+      if (message.type === MSG.POPUP_SET_SUGGEST) {
+        await saveSettings({ ...(await getSettings()), suggestSync: Boolean(message.value) });
+      } else {
+        await saveSuggestDismissed([]);
+        for (const group of Object.values((await getState()).groups)) delete group.suggestDismissedKey;
+        scheduleSaveState();
+      }
+      const active = await getActiveTab();
+      if (active?.windowId) await refreshWindowUi(active.windowId);
       sendResponse(await getPopupStatus());
       return;
     }

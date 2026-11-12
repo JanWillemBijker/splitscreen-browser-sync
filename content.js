@@ -85,7 +85,8 @@
     CHECKLIST_MARK: 'CHECKLIST_MARK',
     OVERLAY_SET: 'OVERLAY_SET',
     OVERLAY_REFRESH: 'OVERLAY_REFRESH',
-    INSPECT_SET: 'INSPECT_SET'
+    INSPECT_SET: 'INSPECT_SET',
+    SUGGEST_DISMISS: 'SUGGEST_DISMISS'
   });
 
   const HOST_ID = 'svss-root';
@@ -527,6 +528,69 @@
       border-top: 1px solid var(--line);
     }
 
+    /* Sync suggestion: compact card next to the floating button. */
+    .svss-suggest {
+      position: absolute;
+      left: 54px;
+      bottom: 0;
+      width: max-content;
+      min-width: 220px;
+      max-width: min(300px, calc(100vw - 90px));
+      padding: 10px 12px 10px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--surface);
+      color: var(--ink);
+      font-size: 13px;
+      line-height: 1.4;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08), 0 12px 32px rgba(0, 0, 0, 0.16);
+      pointer-events: auto;
+      display: none;
+    }
+
+    .svss-suggest.show { display: block; }
+
+    .svss-suggest-head {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: start;
+      gap: 8px;
+    }
+
+    .svss-suggest-title { margin: 0; font-size: 13px; font-weight: 650; line-height: 1.3; padding-top: 3px; }
+
+    .svss-suggest-pair {
+      margin: 2px 0 8px;
+      color: var(--muted);
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+
+    .svss-suggest-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px 10px;
+    }
+
+    .svss-suggest .svss-close { width: 24px; height: 24px; margin: -2px -4px 0 0; }
+
+    .svss-link {
+      appearance: none;
+      padding: 0;
+      border: 0;
+      background: none;
+      color: var(--muted);
+      font: inherit;
+      font-size: 12px;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .svss-link:hover { color: var(--ink); }
+
     @media (prefers-reduced-motion: reduce) {
       * { transition: none !important; }
     }
@@ -561,6 +625,7 @@
   let bubble = null;
   let panel = null;
   let bridge = null;
+  let suggestBox = null;
   let panelOpen = false;
   let isPointerOverBubble = false;
   let isPointerOverPanel = false;
@@ -724,6 +789,73 @@
     panel.classList.toggle('open', panelOpen);
     if (bridge) bridge.classList.toggle('open', panelOpen);
     if (bubble) bubble.setAttribute('aria-expanded', panelOpen ? 'true' : 'false');
+    if (suggestBox) suggestBox.classList.toggle('show', Boolean(uiState.suggestion) && !panelOpen);
+  }
+
+  // "Start sync? site.nl <-> staging.site.nl" with Start, close and "never for
+  // this pair". Start uses the normal start command (trusted click, user
+  // gesture flag); nothing starts without the user pressing it.
+  function renderSuggestion() {
+    if (!suggestBox) return;
+    const suggestion = uiState.suggestion;
+    const focusedKey = shadow?.activeElement?.dataset?.key || null;
+    suggestBox.textContent = '';
+    if (!suggestion || typeof suggestion.left !== 'string' || typeof suggestion.right !== 'string') {
+      suggestBox.classList.remove('show');
+      return;
+    }
+
+    const head = document.createElement('div');
+    head.className = 'svss-suggest-head';
+    const title = document.createElement('p');
+    title.className = 'svss-suggest-title';
+    title.id = 'svss-suggest-title';
+    title.textContent = t('suggestTitle', 'Start sync?');
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'svss-close';
+    close.dataset.key = 'suggest-close';
+    close.setAttribute('aria-label', t('suggestDismiss', 'Not now'));
+    close.appendChild(createIcon('M4 4l8 8M12 4l-8 8'));
+    close.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!event.isTrusted) return;
+      sendUiCommand(event, CMD.SUGGEST_DISMISS, { forever: false });
+    });
+    head.appendChild(title);
+    head.appendChild(close);
+
+    const pair = document.createElement('p');
+    pair.className = 'svss-suggest-pair';
+    // Left pane first, like the panes on screen.
+    pair.textContent = `${suggestion.left.slice(0, 120)} \u2194 ${suggestion.right.slice(0, 120)}`;
+
+    const row = document.createElement('div');
+    row.className = 'svss-suggest-row';
+    row.appendChild(createButton(t('suggestStart', 'Start'), CMD.SYNC_CURRENT, 'svss-btn-primary', null, { key: 'suggest-start' }));
+    const never = document.createElement('button');
+    never.type = 'button';
+    never.className = 'svss-link';
+    never.dataset.key = 'suggest-never';
+    never.textContent = t('suggestNever', "Don't suggest for this pair again");
+    never.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!event.isTrusted) return;
+      sendUiCommand(event, CMD.SUGGEST_DISMISS, { forever: true });
+    });
+    row.appendChild(never);
+
+    suggestBox.appendChild(head);
+    suggestBox.appendChild(pair);
+    suggestBox.appendChild(row);
+    suggestBox.classList.toggle('show', !panelOpen);
+
+    if (focusedKey) {
+      const target = Array.from(suggestBox.querySelectorAll('[data-key]')).find((el) => el.dataset.key === focusedKey);
+      if (target) target.focus({ preventScroll: true });
+    }
   }
 
   function hideFloatingUi() {
@@ -740,6 +872,7 @@
     bubble = null;
     panel = null;
     bridge = null;
+    suggestBox = null;
   }
 
   // Every control of the panel and the rulers lives in a closed shadow root,
@@ -1324,9 +1457,15 @@
       });
     }
 
+    suggestBox = document.createElement('div');
+    suggestBox.className = 'svss-suggest';
+    suggestBox.setAttribute('role', 'region');
+    suggestBox.setAttribute('aria-labelledby', 'svss-suggest-title');
+
     wrap.appendChild(bubble);
     wrap.appendChild(bridge);
     wrap.appendChild(panel);
+    wrap.appendChild(suggestBox);
     shadow.appendChild(style);
     shadow.appendChild(wrap);
   }
@@ -1349,6 +1488,7 @@
     host.style.setProperty('--status-color', getStatusColor(uiState.color));
     bubble.title = `${t('extName', 'SplitScreen Browser Sync')}: ${t(PILL_KEYS[getPanelStatus()], '')}`;
     renderPanelContents();
+    renderSuggestion();
     updatePanelOpenState();
     setWpAdminBarHidden(Boolean(uiState.wpAdminBarHidden));
   }
@@ -4137,7 +4277,7 @@
         sendResponse({ ok: true, stale: true });
         return false;
       }
-      uiState = { ...uiState, show: false, enabled: false, wpAdminBarHidden: false, mirrorClicks: false, mirrorHover: false, showCursor: false, syncContainers: false, syncZoom: false, syncInput: false };
+      uiState = { ...uiState, show: false, enabled: false, suggestion: null, wpAdminBarHidden: false, mirrorClicks: false, mirrorHover: false, showCursor: false, syncContainers: false, syncZoom: false, syncInput: false };
       rulers = [];
       renderRulers();
       updateUi();

@@ -644,5 +644,38 @@
   },
   "badgeReloading": {
     "message": "Synced · a pane is reloading"
+  },
+  "suggestTitle": {
+    "message": "Start sync?"
+  },
+  "suggestStart": {
+    "message": "Start"
+  },
+  "suggestDismiss": {
+    "message": "Not now"
+  },
+  "suggestNever": {
+    "message": "Don't suggest for this pair again"
+  },
+  "suggestPopupLabel": {
+    "message": "Suggestion:"
+  },
+  "suggestWhy": {
+    "message": "Looks like two versions of the same site."
+  },
+  "sectionSuggest": {
+    "message": "Suggestions"
+  },
+  "optSuggest": {
+    "message": "Suggest sync"
+  },
+  "optSuggestHelp": {
+    "message": "Offers to start sync when both panes look like two versions of one site (same page, or live and staging). Never starts by itself."
+  },
+  "btnSuggestReset": {
+    "message": "Suggest dismissed pairs again"
+  },
+  "suggestResetDone": {
+    "message": "Dismissed pairs will be suggested again."
   }
 }

@@ -25,7 +25,10 @@ const MSG = Object.freeze({
   POPUP_CHECKLIST_REMOVE: 'SVSS_POPUP_CHECKLIST_REMOVE',
   POPUP_CHECKLIST_CLEAR: 'SVSS_POPUP_CHECKLIST_CLEAR',
   POPUP_CHECKLIST_GO: 'SVSS_POPUP_CHECKLIST_GO',
-  POPUP_RULER_ADD: 'SVSS_POPUP_RULER_ADD'
+  POPUP_RULER_ADD: 'SVSS_POPUP_RULER_ADD',
+  POPUP_SUGGEST_DISMISS: 'SVSS_POPUP_SUGGEST_DISMISS',
+  POPUP_SET_SUGGEST: 'SVSS_POPUP_SET_SUGGEST',
+  POPUP_SUGGEST_RESET: 'SVSS_POPUP_SUGGEST_RESET'
 });
 
 const $ = (id) => document.getElementById(id);
@@ -196,6 +199,17 @@ function renderStatus(status) {
   statusTitle.textContent = t(titleKey);
   statusBody.textContent = t(bodyKey);
 
+  // Sync suggestion: two versions of one site, not syncing yet. The main
+  // Start sync button below starts it.
+  const suggestion = inSplit && !group.enabled ? status?.suggestion : null;
+  $('suggestion').hidden = !suggestion;
+  $('suggestionNever').hidden = !suggestion;
+  if (suggestion) {
+    $('suggestionLabel').textContent = t('suggestPopupLabel');
+    $('suggestionPair').textContent = `${suggestion.left} \u2194 ${suggestion.right}`;
+  }
+  $('suggestSync').checked = settings.suggestSync !== false;
+
   const offset = Number(group.offsetY || 0);
   statusMeta.hidden = !(inSplit && offset !== 0);
   statusMeta.textContent = statusMeta.hidden ? '' : t('metaOffset', [formatSigned(offset)]);
@@ -296,6 +310,19 @@ for (const { el, key } of defaultToggles) {
     run({ type: MSG.POPUP_SET_DEFAULTS, defaults: { [key]: el.checked } });
   });
 }
+
+$('suggestionNever').addEventListener('click', () => {
+  run({ type: MSG.POPUP_SUGGEST_DISMISS, forever: true });
+});
+
+$('suggestSync').addEventListener('change', () => {
+  run({ type: MSG.POPUP_SET_SUGGEST, value: $('suggestSync').checked });
+});
+
+$('suggestReset').addEventListener('click', async () => {
+  await run({ type: MSG.POPUP_SUGGEST_RESET });
+  $('suggestResetResult').textContent = t('suggestResetDone');
+});
 
 showCurrent.addEventListener('click', () => {
   run({ type: MSG.POPUP_SHOW_BUTTON_CURRENT });
