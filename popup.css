@@ -1079,6 +1079,21 @@ details[open] > .group-summary .chevron {
   font-size: var(--text-xs);
 }
 
+.segmented-inline {
+  margin-bottom: 0;
+}
+
+.range {
+  flex: none;
+  width: 140px;
+  accent-color: var(--switch-on);
+}
+
+output {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
 /* Footer --------------------------------------------------------------- */
 
 .footer {

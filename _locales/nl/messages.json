@@ -551,5 +551,59 @@
   },
   "btnCancel": {
     "message": "Annuleren"
+  },
+  "sectionOverlay": {
+    "message": "Overlay"
+  },
+  "overlayHelp": {
+    "message": "Legt een afbeelding van de ene kant over de andere kant, zodat verschillen opvallen. De afbeelding wordt ververst zodra je stopt met scrollen."
+  },
+  "overlayPanelHelp": {
+    "message": "Een afbeelding van de andere kant, over deze kant heen."
+  },
+  "overlayPermissionHelp": {
+    "message": "Chrome laat een extensie alleen een afbeelding van een tabblad maken met toegang tot alle sites. De overlay vraagt daar daarom één keer om. De afbeelding blijft in je browser."
+  },
+  "btnAllowCapture": {
+    "message": "Afbeeldingen van de helften toestaan"
+  },
+  "overlayNeedPermission": {
+    "message": "Sta eerst afbeeldingen van de helften toe: werkbalkmenu → Vergelijken."
+  },
+  "overlayNeedSync": {
+    "message": "Start de sync om de overlay te gebruiken."
+  },
+  "overlayShow": {
+    "message": "Overlay tonen"
+  },
+  "overlayShowHere": {
+    "message": "Andere kant over deze kant tonen"
+  },
+  "overlayOver": {
+    "message": "Tonen over"
+  },
+  "overlayOpacity": {
+    "message": "Dekking"
+  },
+  "overlayDifference": {
+    "message": "Verschil-weergave"
+  },
+  "overlayDifferenceHelp": {
+    "message": "Gelijke pixels worden zwart; verschillen lichten op."
+  },
+  "overlaySwipe": {
+    "message": "Schuifbalk"
+  },
+  "overlaySwipeHelp": {
+    "message": "Sleep de scheidingslijn op de pagina om beide kanten op één plek te vergelijken."
+  },
+  "overlaySwipeLabel": {
+    "message": "Positie van de scheidingslijn"
+  },
+  "overlayRefresh": {
+    "message": "Afbeelding verversen"
+  },
+  "overlayDeclined": {
+    "message": "Zonder die toestemming kan de overlay de andere helft niet vastleggen."
   }
 }

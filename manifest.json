@@ -50,6 +50,9 @@
     "http://*/*",
     "https://*/*"
   ],
+  "optional_host_permissions": [
+    "<all_urls>"
+  ],
   "commands": {
     "sync-current-split-view": {
       "suggested_key": {

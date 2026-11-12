@@ -9,6 +9,8 @@ const MSG = Object.freeze({
   POPUP_SET_GROUP_OPTION: 'SVSS_POPUP_SET_GROUP_OPTION',
   POPUP_SET_GROUP_CHOICE: 'SVSS_POPUP_SET_GROUP_CHOICE',
   POPUP_SET_PANE_WIDTH: 'SVSS_POPUP_SET_PANE_WIDTH',
+  POPUP_OVERLAY_SET: 'SVSS_POPUP_OVERLAY_SET',
+  POPUP_OVERLAY_REFRESH: 'SVSS_POPUP_OVERLAY_REFRESH',
   POPUP_HISTORY_GET: 'SVSS_POPUP_HISTORY_GET',
   POPUP_HISTORY_OPEN: 'SVSS_POPUP_HISTORY_OPEN',
   POPUP_HISTORY_UPDATE: 'SVSS_POPUP_HISTORY_UPDATE',
@@ -218,6 +220,7 @@ function renderStatus(status) {
   for (const el of document.querySelectorAll('[data-need-pair-hint]')) el.hidden = inSplit;
   renderPaneSizes(group.paneSizes || {});
   if (inSplit && currentTab() === 'checklist') loadChecklist();
+  renderOverlay(group);
 
   showCurrent.disabled = !inSplit;
   addRuler.disabled = !inSplit;
@@ -319,6 +322,80 @@ for (const button of document.querySelectorAll('[data-preset]')) {
     }
   });
 }
+
+// ---- Overlay --------------------------------------------------------------------
+// Capturing a tab needs the optional '<all_urls>' permission. It is requested
+// straight from the click (Chrome requires a user gesture), before anything
+// else is awaited.
+
+const CAPTURE_PERMISSION = { origins: ['<all_urls>'] };
+let capturePermission = false;
+let opacityTimer = null;
+
+async function refreshCapturePermission() {
+  try { capturePermission = await chrome.permissions.contains(CAPTURE_PERMISSION); } catch (_error) { capturePermission = false; }
+  renderOverlay(lastStatus?.group || {});
+}
+
+function renderOverlay(group) {
+  const o = group.overlay || {};
+  const enabled = Boolean(group.enabled);
+  $('overlayPermission').hidden = capturePermission;
+  $('overlayNeedSync').hidden = !capturePermission || enabled;
+  const usable = capturePermission && enabled;
+  $('overlayControls').hidden = !usable;
+  $('overlayRefresh').parentElement.hidden = !usable || !o.on;
+  $('overlayOn').checked = Boolean(o.on);
+  for (const radio of document.querySelectorAll('input[name="overlaySide"]')) {
+    radio.checked = o.target ? radio.value === o.target : false;
+  }
+  const opacity = Math.round((Number(o.opacity) || 0.5) * 100);
+  if (document.activeElement !== $('overlayOpacity') && !opacityTimer) $('overlayOpacity').value = String(opacity);
+  $('overlayOpacityValue').textContent = `${$('overlayOpacity').value}%`;
+  $('overlayDifference').checked = o.blend === 'difference';
+  $('overlaySwipe').checked = Boolean(o.swipe);
+  for (const id of ['overlayOpacity', 'overlayDifference', 'overlaySwipe']) $(id).disabled = !o.on;
+}
+
+async function setOverlay(patch) {
+  const response = await sendMessage({ type: MSG.POPUP_OVERLAY_SET, overlay: patch });
+  if (response?.status) renderStatus(response.status);
+  $('overlayResult').textContent = response && response.ok === false && response.reason === 'permission' ? t('overlayDeclined') : '';
+  return response;
+}
+
+$('allowCapture').addEventListener('click', async () => {
+  let granted = false;
+  try { granted = await chrome.permissions.request(CAPTURE_PERMISSION); } catch (_error) { granted = false; }
+  $('overlayResult').textContent = granted ? '' : t('overlayDeclined');
+  await refreshCapturePermission();
+});
+
+$('overlayOn').addEventListener('change', () => {
+  const side = document.querySelector('input[name="overlaySide"]:checked')?.value;
+  setOverlay({ on: $('overlayOn').checked, ...(side ? { side } : {}) });
+});
+
+for (const radio of document.querySelectorAll('input[name="overlaySide"]')) {
+  radio.addEventListener('change', () => setOverlay({ side: radio.value, on: true }));
+}
+
+$('overlayOpacity').addEventListener('input', () => {
+  $('overlayOpacityValue').textContent = `${$('overlayOpacity').value}%`;
+  if (opacityTimer) clearTimeout(opacityTimer);
+  const opacity = Number($('overlayOpacity').value) / 100;
+  opacityTimer = setTimeout(() => {
+    opacityTimer = null;
+    setOverlay({ opacity });
+  }, 120);
+});
+
+$('overlayDifference').addEventListener('change', () => setOverlay({ blend: $('overlayDifference').checked ? 'difference' : 'normal' }));
+$('overlaySwipe').addEventListener('change', () => setOverlay($('overlaySwipe').checked ? { swipe: true, opacity: 1 } : { swipe: false }));
+$('overlayRefresh').addEventListener('click', () => sendMessage({ type: MSG.POPUP_OVERLAY_REFRESH }));
+
+if (chrome.permissions?.onAdded) chrome.permissions.onAdded.addListener(() => refreshCapturePermission());
+if (chrome.permissions?.onRemoved) chrome.permissions.onRemoved.addListener(() => refreshCapturePermission());
 
 // ---- History of pairs ------------------------------------------------------------
 
@@ -715,3 +792,4 @@ localize();
 restoreTab();
 refresh();
 loadHistory();
+refreshCapturePermission();

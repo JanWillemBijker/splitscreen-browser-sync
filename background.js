@@ -94,6 +94,11 @@ const MSG = Object.freeze({
   VIEWPORT: 'SVSS_VIEWPORT',
   GET_VIEWPORT: 'SVSS_GET_VIEWPORT',
   POPUP_SET_PANE_WIDTH: 'SVSS_POPUP_SET_PANE_WIDTH',
+  POPUP_OVERLAY_SET: 'SVSS_POPUP_OVERLAY_SET',
+  POPUP_OVERLAY_REFRESH: 'SVSS_POPUP_OVERLAY_REFRESH',
+  OVERLAY_IMAGE: 'SVSS_OVERLAY_IMAGE',
+  CAPTURE_HIDE_UI: 'SVSS_CAPTURE_HIDE_UI',
+  CAPTURE_RESTORE_UI: 'SVSS_CAPTURE_RESTORE_UI',
   POPUP_HISTORY_GET: 'SVSS_POPUP_HISTORY_GET',
   POPUP_HISTORY_OPEN: 'SVSS_POPUP_HISTORY_OPEN',
   POPUP_HISTORY_UPDATE: 'SVSS_POPUP_HISTORY_UPDATE',
@@ -132,7 +137,9 @@ const CMD = Object.freeze({
   SET_SHOW_CURSOR: 'SET_SHOW_CURSOR',
   SET_ALIGN_MODE: 'SET_ALIGN_MODE',
   CHECKLIST_GO: 'CHECKLIST_GO',
-  CHECKLIST_MARK: 'CHECKLIST_MARK'
+  CHECKLIST_MARK: 'CHECKLIST_MARK',
+  OVERLAY_SET: 'OVERLAY_SET',
+  OVERLAY_REFRESH: 'OVERLAY_REFRESH'
 });
 
 // Panel commands that set one of EXTRA_BOOL_OPTIONS / CHOICE_OPTIONS.
@@ -186,6 +193,8 @@ const GESTURE_REQUIRED_COMMANDS = new Set([
   CMD.SET_SHOW_CURSOR,
   CMD.CHECKLIST_GO,
   CMD.CHECKLIST_MARK,
+  CMD.OVERLAY_SET,
+  CMD.OVERLAY_REFRESH,
   ...Object.keys(OPTION_COMMANDS)
 ]);
 
@@ -477,6 +486,7 @@ async function pauseForOriginChange(group) {
   debug('Pausing pair: a pane left its pinned origin', group.groupKey);
   group.enabled = false;
   group.pauseReason = PAUSE_ORIGIN_CHANGED;
+  if (group.overlay) group.overlay.on = false;
   group.isReloadingTabs = {};
   group.navigationLocks = {};
   group.error = null;
@@ -678,6 +688,7 @@ function buildUiStateForTab(group, tabId, show = true) {
     rulers: Array.isArray(group.rulers) ? group.rulers : [],
     paneSizes: paneSizesFor(group),
     checklist: checklistSummary(group),
+    overlay: overlaySummaryFor(group, tabId),
     color,
     statusText,
     reloading,
@@ -865,6 +876,204 @@ async function scanWindow(windowId = null) {
 
   scheduleSaveState();
   return state;
+}
+
+// ---- Overlay ("lay the sites on top of each other") ---------------------------
+// The other pane is captured with chrome.tabs.captureVisibleTab and drawn over
+// this pane (opacity, normal or difference blend, optional swipe divider).
+// Findings (Chrome 157, real Split View):
+// - captureVisibleTab captures only the ACTIVE pane of the window (one pane's
+//   viewport), so the other pane is activated briefly, captured and the
+//   previously active pane re-activated (~30 ms, no visible flicker; keyboard
+//   focus returns to the previous pane).
+// - It needs '<all_urls>' or activeTab; the http/https host permissions are
+//   rejected ("Either the '<all_urls>' or 'activeTab' permission is
+//   required"), and activeTab would only cover the pane the user clicked in.
+//   '<all_urls>' is therefore an OPTIONAL permission requested when the user
+//   first turns the overlay on.
+// - At most 2 captures per second (MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND),
+//   so captures are throttled and happen after scrolling stops.
+// The image only goes to the other pane of the same pair, while both panes
+// are on their pinned origins, and is drawn in a closed shadow root with
+// pointer-events: none. It is not stored.
+const CAPTURE_ORIGINS = Object.freeze(['<all_urls>']);
+const CAPTURE_MIN_INTERVAL_MS = 600;
+const CAPTURE_SETTLE_MS = 450;
+const OVERLAY_DEFAULTS = Object.freeze({ on: false, targetTabId: null, opacity: 0.5, blend: 'normal', swipe: false, swipePos: 50 });
+
+let capturePermission = false;
+let lastCaptureAt = 0;
+const captureTimers = new Map();
+const captureRunning = new Set();
+
+async function refreshCapturePermission() {
+  try {
+    capturePermission = await chrome.permissions.contains({ origins: [...CAPTURE_ORIGINS] });
+  } catch (_error) {
+    capturePermission = false;
+  }
+  return capturePermission;
+}
+
+function overlayOf(group) {
+  const o = plainObjectOr(group?.overlay);
+  return {
+    on: Boolean(o.on),
+    targetTabId: typeof o.targetTabId === 'number' ? o.targetTabId : null,
+    opacity: Math.max(0.1, Math.min(1, Number.isFinite(Number(o.opacity)) ? Number(o.opacity) : OVERLAY_DEFAULTS.opacity)),
+    blend: o.blend === 'difference' ? 'difference' : 'normal',
+    swipe: Boolean(o.swipe),
+    swipePos: Math.max(0, Math.min(100, Number.isFinite(Number(o.swipePos)) ? Number(o.swipePos) : 50))
+  };
+}
+
+function overlaySummaryFor(group, tabId) {
+  const o = overlayOf(group);
+  const target = o.targetTabId === group.rightTabId ? 'right' : (o.targetTabId === group.leftTabId ? 'left' : null);
+  return {
+    on: o.on && Boolean(target),
+    target,
+    isTarget: o.on && o.targetTabId === tabId,
+    opacity: o.opacity,
+    blend: o.blend,
+    swipe: o.swipe,
+    swipePos: o.swipePos,
+    permission: capturePermission
+  };
+}
+
+// Applies a validated patch from the popup or the on-page panel.
+async function setOverlay(group, patch, defaultTargetTabId) {
+  const o = overlayOf(group);
+  const p = plainObjectOr(patch);
+  if (typeof p.on === 'boolean') o.on = p.on;
+  if (p.side === 'left') o.targetTabId = group.leftTabId;
+  if (p.side === 'right') o.targetTabId = group.rightTabId;
+  if (Number.isFinite(Number(p.opacity))) o.opacity = Math.max(0.1, Math.min(1, Number(p.opacity)));
+  if (p.blend === 'normal' || p.blend === 'difference') o.blend = p.blend;
+  if (typeof p.swipe === 'boolean') o.swipe = p.swipe;
+  if (Number.isFinite(Number(p.swipePos))) o.swipePos = Math.max(0, Math.min(100, Math.round(Number(p.swipePos))));
+  if (o.targetTabId !== group.leftTabId && o.targetTabId !== group.rightTabId) o.targetTabId = defaultTargetTabId;
+  // Store before any await, so quick successive patches (slider + switch)
+  // build on each other instead of overwriting each other.
+  const turnedOn = o.on && (!group.overlay?.on || Boolean(p.side));
+  group.overlay = o;
+
+  if (o.on && !(await refreshCapturePermission())) {
+    group.overlay.on = false;
+    await sendGroupState(group);
+    return { ok: false, reason: 'permission' };
+  }
+  if (o.on && !group.enabled) {
+    group.overlay.on = false;
+    await sendGroupState(group);
+    return { ok: false, reason: 'not-synced' };
+  }
+  scheduleSaveState();
+  await sendGroupState(group);
+  if (turnedOn) scheduleOverlayCapture(group, 0);
+  return { ok: true };
+}
+
+function scheduleOverlayCapture(group, delay = CAPTURE_SETTLE_MS) {
+  if (!overlayOf(group).on) return;
+  const key = group.groupKey;
+  if (captureTimers.has(key)) clearTimeout(captureTimers.get(key));
+  captureTimers.set(key, setTimeout(() => {
+    captureTimers.delete(key);
+    captureOverlay(key).catch((error) => debug('overlay capture failed', error?.message || error));
+  }, delay));
+}
+
+async function captureOverlay(groupKey) {
+  const state = await getState();
+  const group = state.groups[groupKey];
+  if (!group) return;
+  const o = overlayOf(group);
+  if (!o.on || !group.enabled) return;
+  if (captureRunning.has(groupKey)) {
+    scheduleOverlayCapture(group, CAPTURE_MIN_INTERVAL_MS);
+    return;
+  }
+  const wait = lastCaptureAt + CAPTURE_MIN_INTERVAL_MS - Date.now();
+  if (wait > 0) {
+    scheduleOverlayCapture(group, wait);
+    return;
+  }
+
+  const targetTabId = o.targetTabId;
+  const sourceTabId = getPeerTabId(group, targetTabId);
+  if (!sourceTabId || !(await isPairOnPinnedOrigins(group, sourceTabId))) return;
+  if (!(await refreshCapturePermission())) {
+    group.overlay = { ...o, on: false };
+    await sendGroupState(group);
+    return;
+  }
+
+  captureRunning.add(groupKey);
+  let restoreTabId = null;
+  let uiHidden = false;
+  try {
+    const [source, targetScroll] = await Promise.all([readViewport(sourceTabId), getCurrentScroll(targetTabId)]);
+    if (!source?.size || !targetScroll) return;
+    const [active] = await chrome.tabs.query({ active: true, windowId: group.windowId });
+    uiHidden = true;
+    await Promise.race([safeSendMessage(sourceTabId, { type: MSG.CAPTURE_HIDE_UI }), sleepMs(300)]);
+    if (active && active.id !== sourceTabId) {
+      restoreTabId = active.id;
+      await chrome.tabs.update(sourceTabId, { active: true });
+    }
+    lastCaptureAt = Date.now();
+    const dataUrl = await chrome.tabs.captureVisibleTab(group.windowId, { format: 'png' });
+    if (restoreTabId) {
+      await chrome.tabs.update(restoreTabId, { active: true }).catch(() => undefined);
+      restoreTabId = null;
+    }
+    uiHidden = false;
+    safeSendMessage(sourceTabId, { type: MSG.CAPTURE_RESTORE_UI });
+    if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/png;base64,')) return;
+    // Still the same pair, still on the pinned origins?
+    if (!overlayOf(group).on || overlayOf(group).targetTabId !== targetTabId) return;
+    if (!(await isPairOnPinnedOrigins(group, sourceTabId))) return;
+    await safeSendMessage(targetTabId, {
+      type: MSG.OVERLAY_IMAGE,
+      targetOrigin: pinnedOriginFor(group, targetTabId),
+      image: {
+        dataUrl,
+        width: source.size.w,
+        height: source.size.h,
+        scrollY: targetScroll.scrollY,
+        scrollX: targetScroll.scrollX
+      }
+    });
+  } catch (error) {
+    debug('captureVisibleTab failed', error?.message || error);
+    if (/MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND/.test(String(error?.message))) scheduleOverlayCapture(group, CAPTURE_MIN_INTERVAL_MS);
+  } finally {
+    if (restoreTabId) await chrome.tabs.update(restoreTabId, { active: true }).catch(() => undefined);
+    if (uiHidden) safeSendMessage(sourceTabId, { type: MSG.CAPTURE_RESTORE_UI });
+    captureRunning.delete(groupKey);
+  }
+}
+
+async function handleOverlayCommand(tabId, windowId, command, message) {
+  await scanWindow(windowId);
+  const group = await getGroupForTab(tabId, windowId);
+  if (!group) return;
+  if (command === CMD.OVERLAY_REFRESH) {
+    scheduleOverlayCapture(group, 0);
+    return;
+  }
+  await setOverlay(group, message.overlay, tabId);
+}
+
+async function handlePopupOverlayMessage(message) {
+  const { activeTab, group } = await activeGroup();
+  if (!group) return { ok: false, reason: 'no-pair', status: await getPopupStatus() };
+  let result = { ok: true };
+  if (message.type === MSG.POPUP_OVERLAY_REFRESH) scheduleOverlayCapture(group, 0);
+  else result = await setOverlay(group, message.overlay, activeTab.id);
+  return { ...result, status: await getPopupStatus() };
 }
 
 // ---- History of pairs ---------------------------------------------------------
@@ -1389,6 +1598,7 @@ async function handleViewportMessage(sender, message) {
     scheduleSaveState();
     await sendGroupState(group);
   }
+  scheduleOverlayCapture(group);
 }
 
 async function readViewport(tabId) {
@@ -1695,6 +1905,7 @@ async function stopCurrentSplitView(tabId, windowId) {
   group.pauseReason = null;
   group.error = null;
   group.isReloadingTabs = {};
+  if (group.overlay) group.overlay.on = false;
   await saveStateNow();
   await sendGroupState(group);
 }
@@ -1704,6 +1915,7 @@ async function stopAllSplitViews() {
 
   for (const group of Object.values(state.groups)) {
     group.enabled = false;
+    if (group.overlay) group.overlay.on = false;
     group.pauseReason = null;
     group.error = null;
     group.isReloadingTabs = {};
@@ -1952,6 +2164,7 @@ async function handleScrollMessage(sender, message) {
   if (!targetTabId) return;
 
   await sendRemoteScroll(group, tabId, targetTabId, group.lastKnownScrollX, group.lastKnownScrollY, message.anchor);
+  scheduleOverlayCapture(group);
 }
 
 async function handleNavigationFromTab(tabId, windowId, sourceUrl) {
@@ -2207,6 +2420,7 @@ async function handleContainerScrollMessage(sender, message) {
   if (!targetTabId || !targetOrigin) return;
 
   const raw = plainObjectOr(message.container);
+  scheduleOverlayCapture(group);
   await safeSendMessage(targetTabId, {
     type: MSG.REMOTE_CONTAINER_SCROLL,
     targetOrigin,
@@ -2304,6 +2518,7 @@ async function handleZoomChange(tabId, newZoomFactor) {
   if (!group || !group.enabled || !group.syncZoom) return;
   if (!(await isPairOnPinnedOrigins(group, tabId))) return;
   await applyZoomToPeer(group, tabId, newZoomFactor);
+  scheduleOverlayCapture(group, 700);
 }
 
 // Gives the other pane the zoom of `sourceTabId` (on Start sync and when the
@@ -2403,6 +2618,7 @@ async function handleReadyMessage(sender, message) {
   if (group.enabled) {
     await alignTabToPeer(group, tabId);
     await sendGroupState(group, tabId);
+    scheduleOverlayCapture(group, 700);
   }
 }
 
@@ -2471,6 +2687,10 @@ async function handleUiCommand(sender, command, message = {}) {
     case CMD.SET_HOVER_MIRRORING:
       await setGroupBooleanOption(tabId, windowId, 'mirrorHover', Boolean(message.value));
       break;
+    case CMD.OVERLAY_SET:
+    case CMD.OVERLAY_REFRESH:
+      await handleOverlayCommand(tabId, windowId, command, message);
+      break;
     case CMD.CHECKLIST_GO:
     case CMD.CHECKLIST_MARK:
       await handleChecklistCommand(tabId, windowId, command, message);
@@ -2508,6 +2728,7 @@ function summarizeGroupForPopup(group) {
     ...extraOptionValues(group),
     hideWpAdminBar: Boolean(group.hideWpAdminBar),
     paneSizes: paneSizesFor(group),
+    overlay: overlaySummaryFor(group, null),
     rulerCount: Array.isArray(group.rulers) ? group.rulers.length : 0
   };
 }
@@ -2720,6 +2941,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === MSG.VIEWPORT) {
       await handleViewportMessage(sender, message);
       sendResponse({ ok: true });
+      return;
+    }
+
+    if (message.type === MSG.POPUP_OVERLAY_SET || message.type === MSG.POPUP_OVERLAY_REFRESH) {
+      sendResponse(await handlePopupOverlayMessage(message));
       return;
     }
 
@@ -3067,6 +3293,25 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     return null;
   }).catch((error) => debug('storage.onChanged refresh failed', error));
 });
+
+chrome.permissions.onAdded.addListener(() => {
+  refreshCapturePermission().catch(() => undefined);
+});
+
+chrome.permissions.onRemoved.addListener(() => {
+  refreshCapturePermission().then(async (granted) => {
+    if (granted) return;
+    const state = await getState();
+    for (const group of Object.values(state.groups)) {
+      if (group.overlay?.on) {
+        group.overlay.on = false;
+        await sendGroupState(group);
+      }
+    }
+  }).catch(() => undefined);
+});
+
+refreshCapturePermission().catch(() => undefined);
 
 chrome.runtime.onInstalled.addListener(() => {
   Promise.all([getState().then(saveStateNow), getSettings().then(saveSettings)])

@@ -45,6 +45,9 @@
     REMOTE_CONTAINER_SCROLL: 'SVSS_REMOTE_CONTAINER_SCROLL',
     FIELD_INPUT: 'SVSS_FIELD_INPUT',
     VIEWPORT: 'SVSS_VIEWPORT',
+    OVERLAY_IMAGE: 'SVSS_OVERLAY_IMAGE',
+    CAPTURE_HIDE_UI: 'SVSS_CAPTURE_HIDE_UI',
+    CAPTURE_RESTORE_UI: 'SVSS_CAPTURE_RESTORE_UI',
     GET_VIEWPORT: 'SVSS_GET_VIEWPORT',
     REMOTE_FIELD_INPUT: 'SVSS_REMOTE_FIELD_INPUT'
   });
@@ -73,7 +76,9 @@
     SET_ZOOM_SYNC: 'SET_ZOOM_SYNC',
     SET_INPUT_SYNC: 'SET_INPUT_SYNC',
     CHECKLIST_GO: 'CHECKLIST_GO',
-    CHECKLIST_MARK: 'CHECKLIST_MARK'
+    CHECKLIST_MARK: 'CHECKLIST_MARK',
+    OVERLAY_SET: 'OVERLAY_SET',
+    OVERLAY_REFRESH: 'OVERLAY_REFRESH'
   });
 
   const HOST_ID = 'svss-root';
@@ -356,6 +361,8 @@
     }
 
     .svss-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .svss-range { flex: none; width: 120px; accent-color: var(--switch-on); }
 
     .svss-chip { border-radius: 999px; min-height: 28px; font-size: 12px; padding: 4px 8px; }
     .svss-chip-ok[aria-pressed="true"] { background: var(--ok-bg); color: var(--ok-ink); border-color: var(--switch-on); }
@@ -851,6 +858,80 @@
     return row;
   }
 
+  // A switch that sends an OVERLAY_SET patch.
+  function createOverlaySwitch(label, checked, patchFor, key) {
+    const toggle = document.createElement('label');
+    toggle.className = 'svss-toggle';
+    const text = document.createElement('span');
+    text.textContent = label;
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.className = 'svss-switch';
+    input.checked = Boolean(checked);
+    input.dataset.key = key;
+    input.addEventListener('change', (event) => {
+      event.stopPropagation();
+      if (!isTrustedUiEvent(event)) {
+        input.checked = !input.checked;
+        return;
+      }
+      sendUiCommand(event, CMD.OVERLAY_SET, { overlay: patchFor(input.checked) });
+    });
+    toggle.appendChild(text);
+    toggle.appendChild(input);
+    return toggle;
+  }
+
+  // Overlay controls for this pane: show the other pane on top of this one.
+  function createOverlaySection() {
+    const o = uiState.overlay || {};
+    const section = createSection(t('sectionOverlay', 'Overlay'), t('overlayPanelHelp', ''));
+    if (!o.permission) {
+      const hint = document.createElement('p');
+      hint.className = 'svss-help';
+      hint.textContent = t('overlayNeedPermission', '');
+      section.appendChild(hint);
+      return section;
+    }
+    const side = uiState.side === 'right' ? 'right' : 'left';
+    section.appendChild(createOverlaySwitch(t('overlayShowHere', 'Show the other side over this side'), o.isTarget,
+      (on) => ({ on, side }), 'overlay-on'));
+    if (!o.isTarget) return section;
+
+    const rangeRow = document.createElement('label');
+    rangeRow.className = 'svss-toggle';
+    const rangeText = document.createElement('span');
+    rangeText.textContent = `${t('overlayOpacity', 'Opacity')} ${Math.round((Number(o.opacity) || 0.5) * 100)}%`;
+    const range = document.createElement('input');
+    range.type = 'range';
+    range.min = '10';
+    range.max = '100';
+    range.step = '5';
+    range.value = String(Math.round((Number(o.opacity) || 0.5) * 100));
+    range.className = 'svss-range';
+    range.dataset.key = 'overlay-opacity';
+    range.addEventListener('keydown', (event) => event.stopPropagation());
+    range.addEventListener('input', (event) => {
+      if (!event.isTrusted) return;
+      rangeText.textContent = `${t('overlayOpacity', 'Opacity')} ${range.value}%`;
+      if (overlayHost) overlayHost.style.setProperty('opacity', String(Number(range.value) / 100), 'important');
+    });
+    range.addEventListener('change', (event) => {
+      if (!isTrustedUiEvent(event)) return;
+      sendUiCommand(event, CMD.OVERLAY_SET, { overlay: { opacity: Number(range.value) / 100 } });
+    });
+    rangeRow.appendChild(rangeText);
+    rangeRow.appendChild(range);
+    section.appendChild(rangeRow);
+    section.appendChild(createOverlaySwitch(t('overlayDifference', 'Difference blend'), o.blend === 'difference',
+      (on) => ({ blend: on ? 'difference' : 'normal' }), 'overlay-blend'));
+    section.appendChild(createOverlaySwitch(t('overlaySwipe', 'Swipe divider'), o.swipe,
+      (on) => (on ? { swipe: true, opacity: 1 } : { swipe: false }), 'overlay-swipe'));
+    const refresh = createButton(t('overlayRefresh', 'Refresh image'), CMD.OVERLAY_REFRESH, 'svss-btn-quiet', null, { key: 'overlay-refresh' });
+    section.appendChild(refresh);
+    return section;
+  }
+
   // Compact checklist: position, previous/next and the result of this page.
   function createChecklistSection(info) {
     const section = createSection(t('sectionChecklist', 'Checklist'));
@@ -978,6 +1059,8 @@
     optionsSection.appendChild(createToggle(t('optInput', 'Sync typing'), uiState.syncInput, CMD.SET_INPUT_SYNC));
     optionsSection.appendChild(createToggle(t('optWpAdminBar', 'Hide WordPress admin bar'), uiState.hideWpAdminBar, CMD.SET_WP_ADMIN_BAR));
     panel.appendChild(optionsSection);
+
+    if (uiState.enabled) panel.appendChild(createOverlaySection());
 
     const offsetSection = createSection(t('sectionOffset', 'Scroll offset'), t('offsetHelp', ''));
     const offsetRow = document.createElement('div');
@@ -1239,6 +1322,7 @@
   function updateUi() {
     reconcileHoverFeatureState();
     reconcileCursorFeatureState();
+    reconcileOverlay();
 
     if (!uiState.show) {
       hideFloatingUi();
@@ -3355,6 +3439,216 @@
     sendPointerLeave();
   }
 
+  // ---- Overlay -------------------------------------------------------------------
+  // The service worker captures the other pane (chrome.tabs.captureVisibleTab)
+  // and sends the PNG here when this pane is the overlay target. It is drawn
+  // in a fresh host with a closed shadow root, pointer-events: none (the page
+  // stays usable), with the chosen opacity and blend mode on the host so
+  // "difference" blends with the page itself. Optional swipe divider: only
+  // its handle takes pointer input. The image follows this pane's scrolling
+  // until the next capture (taken when scrolling stops).
+  const OVERLAY_HOST_ID = 'svss-overlay-root';
+  const OVERLAY_CSS = `
+    :host { all: initial; }
+    .layer { position: fixed; inset: 0; overflow: hidden; pointer-events: none; }
+    img { position: absolute; top: 0; left: 0; max-width: none; pointer-events: none; user-select: none; }
+    .divider { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px solid #3cde95; box-shadow: 0 0 0 1px rgba(7, 38, 25, 0.35); }
+    .handle {
+      position: absolute; top: 50%; left: -16px; width: 30px; height: 30px; margin-top: -15px;
+      display: grid; place-items: center; border-radius: 50%; background: #3cde95; color: #072619;
+      box-shadow: 0 1px 2px rgba(7, 38, 25, 0.3), 0 6px 16px rgba(7, 38, 25, 0.2);
+      pointer-events: auto; cursor: ew-resize; touch-action: none;
+      font: 700 14px/1 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    }
+    .handle:focus-visible { outline: 2px solid #0a6e4c; outline-offset: 2px; }
+  `;
+
+  let overlayHost = null;
+  let overlayShadow = null;
+  let overlayImgEl = null;
+  let overlayDivider = null;
+  let overlayHandle = null;
+  let overlayImage = null;
+  let overlaySwipeLocal = null;
+  let overlayRafPending = false;
+
+  function overlayIsTarget() {
+    return Boolean(uiState.enabled && uiState.overlay?.on && uiState.overlay?.isTarget);
+  }
+
+  function teardownOverlay() {
+    if (overlayHost) {
+      ourExtraHosts.delete(overlayHost);
+      overlayHost.remove();
+    }
+    overlayHost = null;
+    overlayShadow = null;
+    overlayImgEl = null;
+    overlayDivider = null;
+    overlayHandle = null;
+  }
+
+  function ensureOverlayLayer() {
+    if (overlayHost && overlayHost.isConnected && overlayHost.parentNode === document.documentElement) {
+      removeForeignNodes([OVERLAY_HOST_ID], overlayHost);
+      return true;
+    }
+    teardownOverlay();
+    removeForeignNodes([OVERLAY_HOST_ID], null);
+    if (!document.documentElement) return false;
+
+    overlayHost = document.createElement('div');
+    overlayHost.id = OVERLAY_HOST_ID;
+    overlayHost.setAttribute('aria-hidden', 'true');
+    document.documentElement.appendChild(overlayHost);
+    ourExtraHosts.add(overlayHost);
+    overlayShadow = overlayHost.attachShadow({ mode: 'closed' });
+    const style = document.createElement('style');
+    style.textContent = OVERLAY_CSS;
+    const layer = document.createElement('div');
+    layer.className = 'layer';
+    overlayImgEl = document.createElement('img');
+    overlayImgEl.alt = '';
+    overlayImgEl.decoding = 'async';
+    overlayDivider = document.createElement('div');
+    overlayDivider.className = 'divider';
+    overlayHandle = document.createElement('div');
+    overlayHandle.className = 'handle';
+    overlayHandle.tabIndex = 0;
+    overlayHandle.setAttribute('role', 'slider');
+    overlayHandle.setAttribute('aria-valuemin', '0');
+    overlayHandle.setAttribute('aria-valuemax', '100');
+    overlayHandle.setAttribute('aria-label', t('overlaySwipeLabel', 'Divider position'));
+    overlayHandle.textContent = '↔';
+    overlayDivider.appendChild(overlayHandle);
+    layer.appendChild(overlayImgEl);
+    layer.appendChild(overlayDivider);
+    overlayShadow.appendChild(style);
+    overlayShadow.appendChild(layer);
+    wireOverlayHandle(overlayHandle);
+    return true;
+  }
+
+  function currentSwipePos() {
+    return overlaySwipeLocal ?? Number(uiState.overlay?.swipePos ?? 50);
+  }
+
+  function applyOverlayStyle() {
+    if (!overlayHost) return;
+    const o = uiState.overlay || {};
+    const declarations = {
+      display: 'block', visibility: 'visible', position: 'fixed', top: '0', left: '0',
+      width: '100vw', height: '100vh', margin: '0', padding: '0', border: '0',
+      'pointer-events': 'none', 'z-index': '2147483646', transform: 'none', filter: 'none',
+      opacity: String(Math.max(0.1, Math.min(1, Number(o.opacity) || 0.5))),
+      'mix-blend-mode': o.blend === 'difference' ? 'difference' : 'normal'
+    };
+    for (const [property, value] of Object.entries(declarations)) overlayHost.style.setProperty(property, value, 'important');
+    const pos = currentSwipePos();
+    overlayImgEl.style.clipPath = o.swipe ? `inset(0 0 0 ${pos}vw)` : 'none';
+    overlayDivider.style.display = o.swipe ? 'block' : 'none';
+    overlayDivider.style.left = `${pos}vw`;
+    overlayHandle.setAttribute('aria-valuenow', String(Math.round(pos)));
+  }
+
+  function positionOverlay() {
+    overlayRafPending = false;
+    if (!overlayImgEl || !overlayImage) return;
+    const { scrollX, scrollY } = readScrollPosition();
+    overlayImgEl.style.transform = `translate(${Math.round(overlayImage.scrollX - scrollX)}px, ${Math.round(overlayImage.scrollY - scrollY)}px)`;
+  }
+
+  function scheduleOverlayPosition() {
+    if (!overlayImgEl || overlayRafPending) return;
+    overlayRafPending = true;
+    requestAnimationFrame(positionOverlay);
+  }
+
+  function reconcileOverlay() {
+    if (!overlayIsTarget()) {
+      overlayImage = null;
+      overlaySwipeLocal = null;
+      teardownOverlay();
+      return;
+    }
+    if (!overlayImage) return;
+    if (!ensureOverlayLayer()) return;
+    applyOverlayStyle();
+    positionOverlay();
+  }
+
+  function applyOverlayImage(image) {
+    if (!overlayIsTarget() || !image || typeof image.dataUrl !== 'string') return;
+    if (!image.dataUrl.startsWith('data:image/png;base64,')) return;
+    overlayImage = {
+      width: Math.max(1, Number(image.width) || window.innerWidth),
+      height: Math.max(1, Number(image.height) || window.innerHeight),
+      scrollX: Number(image.scrollX) || 0,
+      scrollY: Number(image.scrollY) || 0
+    };
+    if (!ensureOverlayLayer()) return;
+    overlayImgEl.src = image.dataUrl;
+    overlayImgEl.style.width = `${overlayImage.width}px`;
+    overlayImgEl.style.height = `${overlayImage.height}px`;
+    applyOverlayStyle();
+    positionOverlay();
+  }
+
+  function sendSwipePos(event) {
+    if (!event.isTrusted || !overlayHost?.isConnected) return;
+    sendRuntimeMessage({ type: MSG.COMMAND, command: CMD.OVERLAY_SET, overlay: { swipePos: Math.round(currentSwipePos()) }, userGesture: true });
+  }
+
+  function wireOverlayHandle(handle) {
+    let dragging = false;
+    handle.addEventListener('pointerdown', (event) => {
+      if (!event.isTrusted || event.button !== 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      dragging = true;
+      try { handle.setPointerCapture(event.pointerId); } catch (_error) {}
+    });
+    handle.addEventListener('pointermove', (event) => {
+      if (!dragging || !event.isTrusted) return;
+      overlaySwipeLocal = Math.max(0, Math.min(100, (event.clientX / Math.max(1, window.innerWidth)) * 100));
+      applyOverlayStyle();
+    });
+    const stop = (event) => {
+      if (!dragging) return;
+      dragging = false;
+      sendSwipePos(event);
+    };
+    handle.addEventListener('pointerup', stop);
+    handle.addEventListener('pointercancel', stop);
+    handle.addEventListener('keydown', (event) => {
+      if (!event.isTrusted) return;
+      const step = event.shiftKey ? 10 : 2;
+      let next = null;
+      if (event.key === 'ArrowLeft') next = currentSwipePos() - step;
+      if (event.key === 'ArrowRight') next = currentSwipePos() + step;
+      if (event.key === 'Home') next = 0;
+      if (event.key === 'End') next = 100;
+      if (next === null) return;
+      event.preventDefault();
+      event.stopPropagation();
+      overlaySwipeLocal = Math.max(0, Math.min(100, next));
+      applyOverlayStyle();
+      sendSwipePos(event);
+    });
+  }
+
+  // While the other pane is captured for an overlay, our own UI in this pane
+  // (button, cursor, rulers) is hidden so it does not end up in the image.
+  let captureRestoreTimer = null;
+
+  function setOwnUiHiddenForCapture(hidden) {
+    for (const node of [host, rulerHost, cursorHost, ...ourExtraHosts]) {
+      if (node) node.style.setProperty('visibility', hidden ? 'hidden' : 'visible', 'important');
+    }
+    if (captureRestoreTimer) clearTimeout(captureRestoreTimer);
+    captureRestoreTimer = hidden ? setTimeout(() => setOwnUiHiddenForCapture(false), 1500) : null;
+  }
+
   async function requestSplitStatus() {
     const response = await sendRuntimeMessage({ type: MSG.GET_SPLIT_STATUS, timestamp: Date.now() });
 
@@ -3445,6 +3739,33 @@
       rulers = [];
       renderRulers();
       updateUi();
+      sendResponse({ ok: true });
+      return false;
+    }
+
+    if (message.type === MSG.OVERLAY_IMAGE) {
+      if (isForThisOrigin(message)) applyOverlayImage(message.image);
+      sendResponse({ ok: true });
+      return false;
+    }
+
+    if (message.type === MSG.CAPTURE_HIDE_UI) {
+      setOwnUiHiddenForCapture(true);
+      // Answer after the hidden state has been painted (or after 120 ms when
+      // this pane is not being painted, e.g. its tab is in the background).
+      let answered = false;
+      const answer = () => {
+        if (answered) return;
+        answered = true;
+        sendResponse({ ok: true });
+      };
+      requestAnimationFrame(() => requestAnimationFrame(answer));
+      setTimeout(answer, 120);
+      return true;
+    }
+
+    if (message.type === MSG.CAPTURE_RESTORE_UI) {
+      setOwnUiHiddenForCapture(false);
       sendResponse({ ok: true });
       return false;
     }
@@ -3558,6 +3879,7 @@
   }, true);
 
   window.addEventListener('scroll', handleLocalScroll, { passive: true });
+  window.addEventListener('scroll', scheduleOverlayPosition, { passive: true });
   document.addEventListener('scroll', handleContainerScroll, { capture: true, passive: true });
   window.addEventListener('wheel', trackAltFromPointer, { capture: true, passive: true });
   document.addEventListener('pointermove', trackAltFromPointer, { capture: true, passive: true });

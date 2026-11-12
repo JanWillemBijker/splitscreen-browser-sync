@@ -551,5 +551,59 @@
   },
   "btnCancel": {
     "message": "Cancel"
+  },
+  "sectionOverlay": {
+    "message": "Overlay"
+  },
+  "overlayHelp": {
+    "message": "Lays an image of one side over the other side, so differences stand out. The image is refreshed when you stop scrolling."
+  },
+  "overlayPanelHelp": {
+    "message": "An image of the other side, on top of this side."
+  },
+  "overlayPermissionHelp": {
+    "message": "Chrome only lets an extension take a picture of a tab with access to all sites, so the overlay asks for that once. The picture stays inside your browser."
+  },
+  "btnAllowCapture": {
+    "message": "Allow capturing the panes"
+  },
+  "overlayNeedPermission": {
+    "message": "Allow capturing the panes first: toolbar menu → Compare."
+  },
+  "overlayNeedSync": {
+    "message": "Start sync to use the overlay."
+  },
+  "overlayShow": {
+    "message": "Show overlay"
+  },
+  "overlayShowHere": {
+    "message": "Show the other side over this side"
+  },
+  "overlayOver": {
+    "message": "Show over"
+  },
+  "overlayOpacity": {
+    "message": "Opacity"
+  },
+  "overlayDifference": {
+    "message": "Difference blend"
+  },
+  "overlayDifferenceHelp": {
+    "message": "Identical pixels turn black; differences light up."
+  },
+  "overlaySwipe": {
+    "message": "Swipe divider"
+  },
+  "overlaySwipeHelp": {
+    "message": "Drag the divider on the page to compare both sides at one spot."
+  },
+  "overlaySwipeLabel": {
+    "message": "Divider position"
+  },
+  "overlayRefresh": {
+    "message": "Refresh image"
+  },
+  "overlayDeclined": {
+    "message": "Without that permission the overlay cannot capture the other pane."
   }
 }

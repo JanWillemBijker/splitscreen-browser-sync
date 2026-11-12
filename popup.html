@@ -238,6 +238,53 @@
           </div>
           <p class="result-line" id="presetResult" role="status" aria-live="polite"></p>
         </div>
+
+        <div class="group" id="overlayGroup" data-needs-pair>
+          <div class="group-head">
+            <h2 class="group-title" data-i18n="sectionOverlay"></h2>
+            <p class="group-help" data-i18n="overlayHelp"></p>
+          </div>
+          <div id="overlayPermission" hidden>
+            <p class="group-help" data-i18n="overlayPermissionHelp"></p>
+            <button type="button" class="btn btn-secondary btn-small" id="allowCapture" data-i18n="btnAllowCapture"></button>
+          </div>
+          <p class="empty-hint" id="overlayNeedSync" data-i18n="overlayNeedSync" hidden></p>
+          <div class="options" id="overlayControls">
+            <label class="option">
+              <span class="option-text"><span class="option-label" data-i18n="overlayShow"></span></span>
+              <input id="overlayOn" type="checkbox" class="switch">
+            </label>
+            <div class="option">
+              <span class="option-text"><span class="option-label" id="overlayOverLabel" data-i18n="overlayOver"></span></span>
+              <div class="segmented segmented-inline" role="radiogroup" aria-labelledby="overlayOverLabel">
+                <label class="segment"><input type="radio" name="overlaySide" value="left"><span data-i18n="colLeft"></span></label>
+                <label class="segment"><input type="radio" name="overlaySide" value="right"><span data-i18n="colRight"></span></label>
+              </div>
+            </div>
+            <label class="option">
+              <span class="option-text"><span class="option-label"><span data-i18n="overlayOpacity"></span> <output id="overlayOpacityValue"></output></span></span>
+              <input id="overlayOpacity" type="range" class="range" min="10" max="100" step="5">
+            </label>
+            <label class="option">
+              <span class="option-text">
+                <span class="option-label" data-i18n="overlayDifference"></span>
+                <span class="option-help" data-i18n="overlayDifferenceHelp"></span>
+              </span>
+              <input id="overlayDifference" type="checkbox" class="switch">
+            </label>
+            <label class="option">
+              <span class="option-text">
+                <span class="option-label" data-i18n="overlaySwipe"></span>
+                <span class="option-help" data-i18n="overlaySwipeHelp"></span>
+              </span>
+              <input id="overlaySwipe" type="checkbox" class="switch">
+            </label>
+          </div>
+          <div class="row-buttons">
+            <button type="button" class="btn btn-secondary btn-small" id="overlayRefresh" data-i18n="overlayRefresh"></button>
+          </div>
+          <p class="result-line" id="overlayResult" role="status" aria-live="polite"></p>
+        </div>
       </section>
 
       <!-- Settings: defaults for new pairs and the on-page button. -->
