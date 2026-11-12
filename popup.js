@@ -52,6 +52,62 @@ function localize() {
     const text = t(el.dataset.i18n);
     if (text) el.textContent = text;
   }
+  for (const el of document.querySelectorAll('[data-i18n-aria]')) {
+    const text = t(el.dataset.i18nAria);
+    if (text) el.setAttribute('aria-label', text);
+  }
+  for (const el of document.querySelectorAll('[data-i18n-placeholder]')) {
+    const text = t(el.dataset.i18nPlaceholder);
+    if (text) el.setAttribute('placeholder', text);
+  }
+}
+
+// ---- Tabs ------------------------------------------------------------------
+// WAI-ARIA tabs with automatic activation: arrow keys / Home / End move
+// between tabs. The last chosen tab is remembered for this browser only.
+
+const TAB_STORE_KEY = 'svssPopupTab';
+const tabButtons = () => Array.from(document.querySelectorAll('[role="tab"]'));
+
+function selectTab(name, { focus = false } = {}) {
+  const buttons = tabButtons();
+  const target = buttons.find((b) => b.dataset.tab === name) || buttons[0];
+  for (const button of buttons) {
+    const selected = button === target;
+    button.setAttribute('aria-selected', selected ? 'true' : 'false');
+    button.tabIndex = selected ? 0 : -1;
+    const panel = document.getElementById(button.getAttribute('aria-controls'));
+    if (panel) panel.hidden = !selected;
+  }
+  if (focus) target.focus();
+  try { localStorage.setItem(TAB_STORE_KEY, target.dataset.tab); } catch (_error) { /* optional */ }
+  document.dispatchEvent(new CustomEvent('svss-tab', { detail: target.dataset.tab }));
+}
+
+function currentTab() {
+  return tabButtons().find((b) => b.getAttribute('aria-selected') === 'true')?.dataset.tab || 'sync';
+}
+
+for (const button of tabButtons()) {
+  button.addEventListener('click', () => selectTab(button.dataset.tab));
+  button.addEventListener('keydown', (event) => {
+    const buttons = tabButtons();
+    const index = buttons.indexOf(button);
+    let next = null;
+    if (event.key === 'ArrowRight') next = buttons[(index + 1) % buttons.length];
+    else if (event.key === 'ArrowLeft') next = buttons[(index - 1 + buttons.length) % buttons.length];
+    else if (event.key === 'Home') next = buttons[0];
+    else if (event.key === 'End') next = buttons[buttons.length - 1];
+    if (!next) return;
+    event.preventDefault();
+    selectTab(next.dataset.tab, { focus: true });
+  });
+}
+
+function restoreTab() {
+  let saved = null;
+  try { saved = localStorage.getItem(TAB_STORE_KEY); } catch (_error) { saved = null; }
+  selectTab(saved || 'sync');
 }
 
 async function sendMessage(message) {
@@ -192,4 +248,5 @@ $('openShortcuts').addEventListener('click', () => {
 
 $('version').textContent = `v${chrome.runtime.getManifest().version}`;
 localize();
+restoreTab();
 refresh();

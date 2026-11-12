@@ -14,7 +14,7 @@
       <span class="masthead-version" id="version"></span>
     </header>
 
-    <!-- Status of the active tab's Split View pair. -->
+    <!-- Status of the active tab's Split View pair. Always visible. -->
     <section class="status" aria-labelledby="statusTitle">
       <div class="status-row">
         <svg class="pair" viewBox="0 0 76 44" aria-hidden="true" focusable="false">
@@ -39,113 +39,123 @@
       </div>
 
       <button id="syncToggle" type="button" class="btn btn-primary" hidden></button>
-
-      <ol class="steps" id="emptySteps" hidden>
-        <li data-i18n="emptyStep1"></li>
-        <li data-i18n="emptyStep2"></li>
-        <li data-i18n="emptyStep3"></li>
-      </ol>
     </section>
 
-    <!-- Options for the current pair; only shown when in a valid Split View. -->
-    <section class="group" id="currentGroup" aria-labelledby="currentGroupTitle" hidden>
-      <div class="group-head">
-        <h2 class="group-title" id="currentGroupTitle" data-i18n="sectionThisSplit"></h2>
-        <p class="group-help" data-i18n="sectionThisSplitHelp"></p>
-      </div>
+    <div class="tabs" role="tablist" data-i18n-aria="tabsLabel">
+      <button type="button" class="tab" role="tab" id="tab-sync" aria-controls="panel-sync" data-tab="sync" data-i18n="tabSync"></button>
+      <button type="button" class="tab" role="tab" id="tab-settings" aria-controls="panel-settings" data-tab="settings" data-i18n="tabSettings"></button>
+    </div>
 
-      <div class="options">
-        <label class="option">
-          <span class="option-text">
-            <span class="option-label" data-i18n="optNavigation"></span>
-            <span class="option-help" data-i18n="optNavigationHelp"></span>
-          </span>
-          <input type="checkbox" class="switch" data-group-option="syncNavigation">
-        </label>
-        <label class="option">
-          <span class="option-text">
-            <span class="option-label" data-i18n="optClicks"></span>
-            <span class="option-help" data-i18n="optClicksHelp"></span>
-          </span>
-          <input type="checkbox" class="switch" data-group-option="mirrorClicks">
-        </label>
-        <label class="option">
-          <span class="option-text">
-            <span class="option-label" data-i18n="optHover"></span>
-            <span class="option-help" data-i18n="optHoverHelp"></span>
-          </span>
-          <input type="checkbox" class="switch" data-group-option="mirrorHover">
-        </label>
-        <label class="option">
-          <span class="option-text">
-            <span class="option-label" data-i18n="optCursor"></span>
-            <span class="option-help" data-i18n="optCursorHelp"></span>
-          </span>
-          <input type="checkbox" class="switch" data-group-option="showCursor">
-        </label>
-        <label class="option">
-          <span class="option-text">
-            <span class="option-label" data-i18n="optWpAdminBar"></span>
-            <span class="option-help" data-i18n="optWpAdminBarHelp"></span>
-          </span>
-          <input type="checkbox" class="switch" data-group-option="hideWpAdminBar">
-        </label>
-      </div>
+    <div class="panels">
+      <!-- Sync: options for the current pair. -->
+      <section class="panel" role="tabpanel" id="panel-sync" aria-labelledby="tab-sync" tabindex="0">
+        <ol class="steps" id="emptySteps" hidden>
+          <li data-i18n="emptyStep1"></li>
+          <li data-i18n="emptyStep2"></li>
+          <li data-i18n="emptyStep3"></li>
+        </ol>
 
-      <div class="actions">
-        <button id="addRuler" type="button" class="btn btn-secondary">
-          <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M2 8h12M8 4v8" /></svg>
-          <span data-i18n="btnAddRuler"></span>
-        </button>
-        <button id="showCurrent" type="button" class="btn btn-secondary"></button>
-      </div>
-    </section>
+        <div class="group" id="currentGroup" hidden>
+          <div class="group-head">
+            <h2 class="group-title" id="currentGroupTitle" data-i18n="sectionThisSplit"></h2>
+            <p class="group-help" data-i18n="sectionThisSplitHelp"></p>
+          </div>
 
-    <details class="group group-collapsible" id="defaultsGroup">
-      <summary class="group-summary">
-        <span class="group-title" data-i18n="sectionDefaults"></span>
-        <svg class="chevron" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M6 4l4 4-4 4"/></svg>
-      </summary>
-      <p class="group-help" data-i18n="sectionDefaultsHelp"></p>
-      <div class="options">
-        <label class="option">
-          <span class="option-text"><span class="option-label" data-i18n="optNavigation"></span></span>
-          <input id="defaultSyncNavigation" type="checkbox" class="switch">
-        </label>
-        <label class="option">
-          <span class="option-text"><span class="option-label" data-i18n="optClicks"></span></span>
-          <input id="defaultMirrorClicks" type="checkbox" class="switch">
-        </label>
-        <label class="option">
-          <span class="option-text"><span class="option-label" data-i18n="optHover"></span></span>
-          <input id="defaultMirrorHover" type="checkbox" class="switch">
-        </label>
-        <label class="option">
-          <span class="option-text"><span class="option-label" data-i18n="optCursor"></span></span>
-          <input id="defaultShowCursor" type="checkbox" class="switch">
-        </label>
-        <label class="option">
-          <span class="option-text"><span class="option-label" data-i18n="optWpAdminBar"></span></span>
-          <input id="defaultHideWpAdminBar" type="checkbox" class="switch">
-        </label>
-      </div>
-    </details>
+          <div class="options">
+            <label class="option">
+              <span class="option-text">
+                <span class="option-label" data-i18n="optNavigation"></span>
+                <span class="option-help" data-i18n="optNavigationHelp"></span>
+              </span>
+              <input type="checkbox" class="switch" data-group-option="syncNavigation">
+            </label>
+            <label class="option">
+              <span class="option-text">
+                <span class="option-label" data-i18n="optClicks"></span>
+                <span class="option-help" data-i18n="optClicksHelp"></span>
+              </span>
+              <input type="checkbox" class="switch" data-group-option="mirrorClicks">
+            </label>
+            <label class="option">
+              <span class="option-text">
+                <span class="option-label" data-i18n="optHover"></span>
+                <span class="option-help" data-i18n="optHoverHelp"></span>
+              </span>
+              <input type="checkbox" class="switch" data-group-option="mirrorHover">
+            </label>
+            <label class="option">
+              <span class="option-text">
+                <span class="option-label" data-i18n="optCursor"></span>
+                <span class="option-help" data-i18n="optCursorHelp"></span>
+              </span>
+              <input type="checkbox" class="switch" data-group-option="showCursor">
+            </label>
+            <label class="option">
+              <span class="option-text">
+                <span class="option-label" data-i18n="optWpAdminBar"></span>
+                <span class="option-help" data-i18n="optWpAdminBarHelp"></span>
+              </span>
+              <input type="checkbox" class="switch" data-group-option="hideWpAdminBar">
+            </label>
+          </div>
 
-    <details class="group group-collapsible" id="buttonGroup">
-      <summary class="group-summary">
-        <span class="group-title" data-i18n="sectionButton"></span>
-        <svg class="chevron" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M6 4l4 4-4 4"/></svg>
-      </summary>
-      <div class="options">
-        <label class="option">
-          <span class="option-text">
-            <span class="option-label" data-i18n="optAlwaysShow"></span>
-            <span class="option-help" data-i18n="optAlwaysShowHelp"></span>
-          </span>
-          <input id="alwaysShow" type="checkbox" class="switch">
-        </label>
-      </div>
-    </details>
+          <div class="actions">
+            <button id="addRuler" type="button" class="btn btn-secondary">
+              <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M2 8h12M8 4v8" /></svg>
+              <span data-i18n="btnAddRuler"></span>
+            </button>
+            <button id="showCurrent" type="button" class="btn btn-secondary"></button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Settings: defaults for new pairs and the on-page button. -->
+      <section class="panel" role="tabpanel" id="panel-settings" aria-labelledby="tab-settings" tabindex="0" hidden>
+        <div class="group">
+          <div class="group-head">
+            <h2 class="group-title" data-i18n="sectionDefaults"></h2>
+            <p class="group-help" data-i18n="sectionDefaultsHelp"></p>
+          </div>
+          <div class="options">
+            <label class="option">
+              <span class="option-text"><span class="option-label" data-i18n="optNavigation"></span></span>
+              <input id="defaultSyncNavigation" type="checkbox" class="switch">
+            </label>
+            <label class="option">
+              <span class="option-text"><span class="option-label" data-i18n="optClicks"></span></span>
+              <input id="defaultMirrorClicks" type="checkbox" class="switch">
+            </label>
+            <label class="option">
+              <span class="option-text"><span class="option-label" data-i18n="optHover"></span></span>
+              <input id="defaultMirrorHover" type="checkbox" class="switch">
+            </label>
+            <label class="option">
+              <span class="option-text"><span class="option-label" data-i18n="optCursor"></span></span>
+              <input id="defaultShowCursor" type="checkbox" class="switch">
+            </label>
+            <label class="option">
+              <span class="option-text"><span class="option-label" data-i18n="optWpAdminBar"></span></span>
+              <input id="defaultHideWpAdminBar" type="checkbox" class="switch">
+            </label>
+          </div>
+        </div>
+
+        <div class="group">
+          <div class="group-head">
+            <h2 class="group-title" data-i18n="sectionButton"></h2>
+          </div>
+          <div class="options">
+            <label class="option">
+              <span class="option-text">
+                <span class="option-label" data-i18n="optAlwaysShow"></span>
+                <span class="option-help" data-i18n="optAlwaysShowHelp"></span>
+              </span>
+              <input id="alwaysShow" type="checkbox" class="switch">
+            </label>
+          </div>
+        </div>
+      </section>
+    </div>
 
     <footer class="footer">
       <button id="openShortcuts" type="button" class="link-button" data-i18n="footerShortcuts"></button>

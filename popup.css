@@ -85,7 +85,7 @@ body {
 }
 
 body {
-  width: 340px;
+  width: 360px;
   overflow-x: hidden;
   color: var(--ink);
   font: 400 var(--text-sm)/1.45 var(--font);
@@ -112,7 +112,100 @@ ol {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  padding: var(--space-4);
+  /* Chrome caps extension popups at 800x600; the tab panels scroll inside
+     so the popup never grows past that, whatever the state. */
+  max-height: 600px;
+  padding: var(--space-4) var(--space-4) var(--space-3);
+}
+
+.masthead,
+.status,
+.tabs,
+.footer {
+  flex: none;
+}
+
+/* Tabs ----------------------------------------------------------------- */
+
+.tabs {
+  display: flex;
+  gap: var(--space-1);
+  border-bottom: 1px solid var(--line);
+}
+
+.tab {
+  position: relative;
+  flex: 1;
+  min-height: 34px;
+  padding: var(--space-2) var(--space-1);
+  border: 0;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tab:hover {
+  color: var(--ink);
+  background: var(--tint-neutral);
+}
+
+.tab[aria-selected="true"] {
+  color: var(--ink);
+}
+
+.tab[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  left: var(--space-2);
+  right: var(--space-2);
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--switch-on);
+}
+
+.tab-badge {
+  margin-left: var(--space-1);
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--tint-neutral);
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.panels {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin: calc(var(--space-1) * -1) calc(var(--space-4) * -1) 0;
+  padding: var(--space-1) var(--space-4) var(--space-1);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.panel:focus-visible {
+  outline-offset: -2px;
+}
+
+.panel > .group:first-child,
+.panel > [hidden] + .group {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.empty-hint {
+  color: var(--muted);
+  font-size: var(--text-xs);
 }
 
 /* Masthead ------------------------------------------------------------- */
@@ -147,7 +240,7 @@ ol {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  padding: var(--space-4);
+  padding: var(--space-3) var(--space-4);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   background: var(--tint-neutral);
@@ -288,8 +381,7 @@ ol {
 .steps {
   display: grid;
   gap: var(--space-2);
-  padding: var(--space-3) 0 0 var(--space-5);
-  border-top: 1px solid var(--line);
+  padding: 0 0 0 var(--space-5);
   color: var(--ink);
 }
 

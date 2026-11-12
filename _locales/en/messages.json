@@ -241,5 +241,17 @@
   },
   "toastClickSkipped": {
     "message": "Click not mirrored (form/action)"
+  },
+  "tabsLabel": {
+    "message": "Sections"
+  },
+  "tabSync": {
+    "message": "Sync"
+  },
+  "tabSettings": {
+    "message": "Settings"
+  },
+  "needPairHint": {
+    "message": "Open two web pages in a Split View to use this."
   }
 }

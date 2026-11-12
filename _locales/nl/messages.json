@@ -241,5 +241,17 @@
   },
   "toastClickSkipped": {
     "message": "Klik niet gespiegeld (formulier/actie)"
+  },
+  "tabsLabel": {
+    "message": "Onderdelen"
+  },
+  "tabSync": {
+    "message": "Sync"
+  },
+  "tabSettings": {
+    "message": "Instellingen"
+  },
+  "needPairHint": {
+    "message": "Open twee webpagina's in een Split View om dit te gebruiken."
   }
 }
