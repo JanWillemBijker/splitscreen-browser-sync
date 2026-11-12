@@ -1,6 +1,6 @@
 # Chrome Web Store listing – SplitScreen Browser Sync 1.1.0
 
-Everything needed to fill in the Chrome Web Store Developer Dashboard. Primary language: English; Dutch is added as a second localized listing.
+Everything needed to fill in the Chrome Web Store Developer Dashboard. Primary language: English; Dutch, German, French, Spanish, Italian, Portuguese (Brazil) and Polish are added as localized listings (texts for the last six in [`listings/`](listings/)).
 
 ## Basics
 
@@ -10,7 +10,7 @@ Everything needed to fill in the Chrome Web Store Developer Dashboard. Primary l
 | Short description EN (manifest, max 132) | Sync scrolling, clicks and hover between the two tabs of a Chrome Split View. Made for comparing live and staging sites. (120 chars) |
 | Short description NL (manifest, max 132) | Synchroniseer scrollen, klikken en hover tussen de twee tabbladen van een Chrome Split View. Voor live en staging naast elkaar. (127 chars) |
 | Category | Productivity → Developer Tools |
-| Language | English (default), Dutch |
+| Language | English (default), Dutch, German, French, Spanish, Italian, Portuguese (Brazil), Polish |
 | Version | 1.1.0 |
 | Minimum Chrome | 140 (needs Chrome's native Split View) |
 | Homepage / support URL | https://bijbijker.nl |
@@ -31,6 +31,8 @@ What it does
 • Also syncs scroll areas (modals, side panels) and the zoom level
 • Shows the width and height of each pane, with width presets (375 to 1440 px)
 • Every Split View pair stays separate, even with ten pairs open
+• Status on the toolbar icon: a green dot while synced, orange "II" when paused
+• Suggests starting sync when both panes look like live and staging (never starts by itself)
 • Keeps syncing after a normal or hard reload of either side
 • Sync navigation (on by default): follow a link on one side and the other side opens the same path on its own domain (live ↔ staging)
 • Origin pinning: everything is mirrored only between the two sites you pressed Start sync for; if a pane opens another site, sync pauses until you start it again
@@ -50,7 +52,7 @@ How to use it
 3. Open the extension and press Start sync, or use the floating button on the page.
 
 Privacy
-No account, no tracking, no analytics, no remote code, and nothing is sent to the developer. To sync, the extension passes the scroll position, the path of the page you navigate to, your mouse pointer position, the zoom level and (if enabled) the element you hover or click, what you type, an image of the other pane for the overlay and CSS values for the inspector from one pane to the other, only between the two sites you started sync for. Checklists and recent pairs stay on your device. Password, PIN and payment fields are never read or mirrored. The overlay asks once for permission to capture tabs; everything else works without it.
+No account, no tracking, no analytics, no remote code, and nothing is sent to the developer. To sync, the extension passes the scroll position, the path of the page you navigate to, your mouse pointer position, the zoom level and (if enabled) the element you hover or click, what you type, an image of the other pane for the overlay and CSS values for the inspector from one pane to the other, only between the two sites you started sync for. Checklists, recent pairs and pairs you no longer want suggested stay on your device; the toolbar status and the sync suggestion are worked out inside the browser. Password, PIN and payment fields are never read or mirrored. The overlay asks once for permission to capture tabs; everything else works without it.
 
 Made by BijBijker – https://bijbijker.nl
 
@@ -68,6 +70,8 @@ Wat het doet
 • Synchroniseert ook scrollgebieden (modals, zijpanelen) en het zoomniveau
 • Toont de breedte en hoogte van elke helft, met breedte-voorinstellingen (375 tot 1440 px)
 • Elk Split View-paar blijft apart, ook met tien paren open
+• Status op het icoon in de werkbalk: een groene stip als er gesynchroniseerd wordt, oranje "II" bij een pauze
+• Stelt voor de sync te starten als beide helften op live en staging lijken (start nooit vanzelf)
 • Blijft syncen na normaal of hard herladen van een kant
 • Navigatie synchroniseren (standaard aan): volg een link aan de ene kant en de andere kant opent hetzelfde pad op het eigen domein (live ↔ staging)
 • Origin pinning: er wordt alleen gespiegeld tussen de twee sites waarvoor je op Sync starten klikte; opent een helft een andere site, dan pauzeert de sync tot je hem opnieuw start
@@ -87,9 +91,24 @@ Zo werkt het
 3. Open de extensie en klik op Sync starten, of gebruik de zwevende knop op de pagina.
 
 Privacy
-Geen account, geen tracking, geen analytics, geen externe code, en er gaat niets naar de ontwikkelaar. Om te syncen geeft de extensie de scrollpositie, het pad van de pagina waar je naartoe navigeert, de positie van je muisaanwijzer, het zoomniveau en (als dat aan staat) het element waar je overheen beweegt of op klikt, wat je typt, een afbeelding van de andere helft voor de overlay en CSS-waarden voor de inspectie door van de ene helft naar de andere, alleen tussen de twee sites waarvoor je de sync startte. Checklists en recente paren blijven op je apparaat. Wachtwoord-, pincode- en betaalvelden worden nooit gelezen of gespiegeld. De overlay vraagt één keer toestemming om tabbladen vast te leggen; al het andere werkt zonder.
+Geen account, geen tracking, geen analytics, geen externe code, en er gaat niets naar de ontwikkelaar. Om te syncen geeft de extensie de scrollpositie, het pad van de pagina waar je naartoe navigeert, de positie van je muisaanwijzer, het zoomniveau en (als dat aan staat) het element waar je overheen beweegt of op klikt, wat je typt, een afbeelding van de andere helft voor de overlay en CSS-waarden voor de inspectie door van de ene helft naar de andere, alleen tussen de twee sites waarvoor je de sync startte. Checklists, recente paren en paren die je niet meer voorgesteld wilt krijgen blijven op je apparaat; de status op het icoon en het sync-voorstel worden in de browser bepaald. Wachtwoord-, pincode- en betaalvelden worden nooit gelezen of gespiegeld. De overlay vraagt één keer toestemming om tabbladen vast te leggen; al het andere werkt zonder.
 
 Gemaakt door BijBijker – https://bijbijker.nl
+
+## Other languages
+
+Chrome takes the name and short description from `_locales/<lang>/messages.json` automatically. For the store page, open "Add localized listing", choose the language and paste the detailed description from the file below.
+
+| Language | Short description (manifest, max 132) | Chars | Detailed description |
+|---|---|---:|---|
+| German (`de`) | Scrollen, Klicks und Hover zwischen den zwei Tabs einer Chrome Split View synchronisieren. Für den Vergleich von Live und Staging. | 130 | [listings/de.md](listings/de.md) |
+| French (`fr`) | Synchronisez défilement, clics et survol entre les deux onglets d’une Split View de Chrome. Pour comparer site live et staging. | 127 | [listings/fr.md](listings/fr.md) |
+| Spanish (`es`) | Sincroniza desplazamiento, clics y hover entre las dos pestañas de una Split View de Chrome. Para comparar live y staging. | 122 | [listings/es.md](listings/es.md) |
+| Italian (`it`) | Sincronizza scorrimento, clic e hover tra le due schede di una Split View di Chrome. Per confrontare siti live e di staging. | 124 | [listings/it.md](listings/it.md) |
+| Portuguese (Brazil) (`pt_BR`) | Sincronize rolagem, cliques e hover entre as duas guias de uma Split View do Chrome. Feito para comparar sites live e staging. | 126 | [listings/pt_BR.md](listings/pt_BR.md) |
+| Polish (`pl`) | Synchronizuje przewijanie, kliknięcia i hover między dwiema kartami Split View w Chrome. Do porównywania wersji live i staging. | 127 | [listings/pl.md](listings/pl.md) |
+
+Screenshots, promo tile and marquee are only provided in English and Dutch. For the other languages upload nothing: the store then shows the English images.
 
 ## Single purpose (dashboard field)
 
@@ -106,7 +125,7 @@ NL: Twee versies van een website naast elkaar vergelijken in een Chrome Split Vi
 | `storage` | Saves the user's settings (`chrome.storage.local`) and the per-pair sync state such as offset and ruler lines (`chrome.storage.session`, cleared when the browser closes). |
 | Optional host permission `<all_urls>` | Requested at runtime, only when the user turns on the Overlay ("Allow capturing the panes"). `chrome.tabs.captureVisibleTab` refuses to run with only `http://*/*`/`https://*/*` ("Either the '<all_urls>' or 'activeTab' permission is required"); `activeTab` is not enough because the overlay captures the *other* pane of the Split View, not the one the user clicked in, and keeps refreshing the image after scrolling. The image is only drawn over the other pane of the same pair and never stored or sent anywhere. Content scripts still only match http/https. Without this permission everything except the overlay works. |
 | Remote code | None. All JavaScript is in the package; no `eval`, no `new Function`, no remote scripts. |
-| APIs without extra permission | `chrome.tabs.setZoom`/`onZoomChange` (sync zoom), `chrome.tabs.createSplit` (reopen a remembered pair as a Split View, Chrome 155+), `chrome.windows.update` (width presets), `chrome.permissions` (the optional permission above). |
+| APIs without extra permission | `chrome.tabs.setZoom`/`onZoomChange` (sync zoom), `chrome.tabs.createSplit` (reopen a remembered pair as a Split View, Chrome 155+), `chrome.windows.update` (width presets), `chrome.permissions` (the optional permission above), `chrome.action` badge/title per tab (pair status on the toolbar icon). |
 
 Removed in 1.1.0 for least privilege: `tabs` (host permissions already give access to the URL of http/https tabs) and `web_accessible_resources` (the on-page button icon is now drawn inline, so no extension file is exposed to websites).
 
@@ -139,7 +158,7 @@ The popup and on-page panel in the screenshots are captures of the real extensio
 ## Publishing checklist
 
 - [ ] Run `./package.sh` and upload `dist/splitscreen-browser-sync-1.1.0.zip`
-- [ ] Store listing: paste the EN detailed description; add Dutch under "Add localized listing" and paste the NL text
+- [ ] Store listing: paste the EN detailed description; add Dutch under "Add localized listing" and paste the NL text; add de, fr, es, it, pt_BR, pl the same way from `store/listings/<lang>.md` (no images: English ones are used)
 - [ ] Upload the 5 EN screenshots marked *Upload 1–5*, promo tile and marquee; the same 5 NL screenshots to the Dutch listing
 - [ ] Category: Developer Tools; language: English
 - [ ] Privacy tab: single purpose text, the permission justifications (including the optional `<all_urls>`), "no remote code", data usage: nothing collected, tick the three certifications

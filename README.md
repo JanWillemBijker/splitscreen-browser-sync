@@ -2,7 +2,7 @@
 
 Version: 1.1.0 · Made by [BijBijker](https://bijbijker.nl)
 
-Manifest V3 Chrome Extension for pixel-perfect scroll sync between two tabs in Chrome native Split View. Requires Chrome 140 or newer. Available in English and Dutch.
+Manifest V3 Chrome Extension for pixel-perfect scroll sync between two tabs in Chrome native Split View. Requires Chrome 140 or newer. Available in English, Dutch, German, French, Spanish, Italian, Brazilian Portuguese and Polish.
 
 ## Install
 
@@ -16,7 +16,7 @@ From the Chrome Web Store (once published), or locally:
 
 ## Privacy
 
-Nothing is sent to the developer or any server: no analytics and no remote code; settings, checklists, the pair history and per-pair state stay in `chrome.storage.local` / `chrome.storage.session`. Between the two panes of a pair the extension does pass data from one site to the other: the scroll position (and a description of the top element in "on element" alignment), scroll positions of scroll areas, the zoom level, the path/query/hash of a navigation, the mouse position and (when enabled) a description of the clicked or hovered element, what you type (Sync typing, **off** by default), an image of the other pane (Overlay, only when you turn it on) and CSS values of the inspected element (Inspect differences, only while on). That only happens between the two sites (origins) the pair was started on. Password, one-time-code, PIN and payment card fields are never read and never mirrored. Full policy: [store/PRIVACY.md](store/PRIVACY.md).
+Nothing is sent to the developer or any server: no analytics and no remote code; settings, checklists, the pair history and per-pair state stay in `chrome.storage.local` / `chrome.storage.session`. Between the two panes of a pair the extension does pass data from one site to the other: the scroll position (and a description of the top element in "on element" alignment), scroll positions of scroll areas, the zoom level, the path/query/hash of a navigation, the mouse position and (when enabled) a description of the clicked or hovered element, what you type (Sync typing, **off** by default), an image of the other pane (Overlay, only when you turn it on) and CSS values of the inspected element (Inspect differences, only while on). That only happens between the two sites (origins) the pair was started on. The toolbar badge and the sync suggestion are worked out locally from the two tab URLs; only pairs you chose not to be suggested again are stored (`chrome.storage.local`). Password, one-time-code, PIN and payment card fields are never read and never mirrored. Full policy: [store/PRIVACY.md](store/PRIVACY.md).
 
 ## Packaging for the Chrome Web Store
 
@@ -56,6 +56,45 @@ Made by BijBijker – https://bijbijker.nl
 - Overlay mode: one side on top of the other with opacity, difference blend and a swipe divider.
 - Inspect CSS differences of the element under the cursor.
 - Shows the size of each pane and resizes the window to width presets.
+
+## New in 1.1.0 (third round)
+
+### Status on the toolbar icon
+
+Each pane of a pair gets its own badge on the extension icon (`chrome.action` per `tabId`, no extra permission):
+
+| Badge | Meaning |
+|---|---|
+| green dot | synced |
+| grey dot | synced, a pane is reloading |
+| orange `II` | paused because a pane opened another site (press Start sync again) |
+| red `!` | other pane not responding |
+| none | not in a Split View pair, or sync is off |
+
+The tooltip says the same per tab, for example *Synced with staging.example.com* (the host of the other pane). The badge follows every state change of the pair and is cleared when the pair dissolves. Chrome resets tab-specific badges when a tab navigates, so the extension sets it again after every load.
+
+### Sync suggestion
+
+When a pair is **not** syncing and both panes look like two versions of one site, the extension offers to start sync. It never starts by itself.
+
+How it decides (only from the two tab URLs, locally):
+
+1. Both panes are http/https on **different origins** (an origin is scheme + host + port).
+2. And either the **same path** (trailing slash ignored, query and `#` ignored; a bare `/` does not count, otherwise any two home pages would match),
+3. or the **hosts look related**: equal after removing leading environment labels (`www`, `staging`, `stage`, `test`, `dev`, `acc`, `uat`, `qa`, `preview`, `preprod`, `beta`, `demo`, `live`, `prod`, …), the same site name before the public suffix (`site.nl` ~ `site.test` ~ `staging.site.co.uk`; hosting suffixes such as `netlify.app`, `vercel.app`, `github.io`, `pages.dev`, `wpengine.com`, `ddev.site` count as suffix), or an environment part in the first label (`site-staging.netlify.app` ~ `site.nl`). IP addresses only match on the path.
+4. Not shown after you stopped sync for those two sites (this session), for a pair you dismissed, while the pair is paused for another site, or when **Settings → Suggest sync** is off.
+
+Where it shows:
+
+- On the page, next to the floating button (in the same closed shadow root): *Start sync? site.nl ↔ staging.site.nl* with **Start**, **×** (not now: this pair of tabs and sites, this session) and **Don't suggest for this pair again**. **Start** is the normal start command from a trusted click (user-gesture flag), exactly like the panel's Start sync. Hidden while the panel is open; only shown where the floating button is shown.
+- In the popup, in the status card: *Suggestion: site.nl ↔ staging.site.nl* above **Start sync**, with **Don't suggest for this pair again**.
+- **Settings → Suggestions**: *Suggest sync* (default on) and *Suggest dismissed pairs again*.
+
+"Don't suggest again" stores the two origins (sorted, so the order of the panes does not matter) in `chrome.storage.local`, at most 200 pairs (oldest dropped). Nothing leaves the browser.
+
+### More languages
+
+German, French, Spanish, Italian, Brazilian Portuguese and Polish UI (`_locales/de`, `fr`, `es`, `it`, `pt_BR`, `pl`); English stays the default. `node scripts/check-locales.mjs` (not packaged; also run by `package.sh`) checks that every locale has exactly the keys of `en`, the same placeholders, a store short description of at most 132 characters and a 6-column CSV header; `--lengths` lists strings much longer than English.
 
 ## New in 1.1.0 (second round)
 
@@ -231,10 +270,11 @@ splitview-browser-sync/
 ├── popup.html
 ├── popup.css
 ├── popup.js
-├── _locales/        en + nl UI strings
+├── _locales/        UI strings: en (default), nl, de, fr, es, it, pt_BR, pl
 ├── icons/
 ├── package.sh       builds dist/splitscreen-browser-sync-<version>.zip
-├── store/           listing texts, privacy policy, store images (not packaged)
+├── scripts/         check-locales.mjs (development check, not packaged)
+├── store/           listing texts (LISTING.md, listings/<lang>.md), privacy policy, store images (not packaged)
 └── README.md
 ```
 
@@ -495,7 +535,9 @@ chrome://extensions/shortcuts
 - [ ] Popup options under `This Split View` change the current pair immediately (check the on-page panel).
 - [ ] Outside a Split View the popup shows `Not in a Split View` with the three setup steps.
 - [ ] On `chrome://` pages inside a Split View the popup shows `This page can't be synced`.
-- [ ] With Chrome set to Dutch, the popup and panel are in Dutch.
+- [ ] With Chrome set to Dutch, the popup and panel are in Dutch (same for German, French, Spanish, Italian, Portuguese (Brazil), Polish).
+- [ ] Toolbar icon: green dot on both panes after Start sync, tooltip "Synced with <other host>"; orange `II` after one pane opens another site; no badge after Stop sync or after leaving the Split View.
+- [ ] Open `site.nl/about/` next to `staging.site.nl/about/` without syncing: the on-page card and the popup suggest sync; Start starts it; × hides it; "Don't suggest for this pair again" survives a browser restart; Settings → Suggest dismissed pairs again brings it back.
 - [ ] Clicking a password field on one side does not focus or click the field on the other side.
 - [ ] Manual hide overrides automatic display for the current Split View group during the current session.
 - [ ] The popup contains no Split View ID or technical pair information.

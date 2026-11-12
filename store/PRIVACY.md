@@ -46,6 +46,9 @@ The extension never reads what you type into form fields unless you turn on "Syn
 | Page checklists: the paths you add, the result (Good/Wrong/N/A) and your notes, per pair of sites | So you can continue checking later | `chrome.storage.local` on your device | Until you clear the list or remove the extension (max 50 lists) |
 | Recent pairs: the site and path (no query string or `#` part) of both panes of pairs you started sync for, an optional name you give them | To reopen a pair with one click | `chrome.storage.local` on your device | Until you remove them, clear the history or turn off "Remember pairs" (max 20 recent and 30 favourites) |
 | Overlay settings and the size of each pane | To show the overlay and the pane sizes | `chrome.storage.session` | Cleared when the browser closes |
+| Pairs of sites you chose "Don't suggest for this pair again" for: the two origins (for example `https://example.com` and `https://staging.example.com`), no paths | So the sync suggestion stays away for that pair | `chrome.storage.local` on your device | Until you click "Suggest dismissed pairs again" or remove the extension (max 200 pairs) |
+
+The status badge on the toolbar icon and the sync suggestion ("Start sync? example.com ↔ staging.example.com") are worked out inside your browser from the addresses of the two tabs; nothing about them leaves the browser and nothing is sent to either website.
 
 Element descriptions, typed text, the mouse pointer position, overlay images and CSS values are passed directly between your two tabs inside the extension and are not stored. CSV exports of a checklist are only created when you click "Export CSV" and are saved where you choose.
 
@@ -106,6 +109,9 @@ De extensie leest nooit wat je in formuliervelden typt, tenzij je "Typen synchro
 | Checklists: de paden die je toevoegt, het resultaat (Goed/Fout/N.v.t.) en je notities, per paar sites | Zodat je later verder kunt controleren | `chrome.storage.local` op je apparaat | Tot je de lijst wist of de extensie verwijdert (max. 50 lijsten) |
 | Recente paren: de site en het pad (zonder querystring of `#`-deel) van beide helften van paren waarvoor je de sync startte, en een eventuele naam die je ze geeft | Om een paar met één klik opnieuw te openen | `chrome.storage.local` op je apparaat | Tot je ze verwijdert, de geschiedenis wist of "Paren onthouden" uitzet (max. 20 recente en 30 favorieten) |
 | Overlay-instellingen en de afmeting van elke helft | Om de overlay en de afmetingen te tonen | `chrome.storage.session` | Gewist zodra de browser sluit |
+| Paren van sites waarvoor je "Niet meer voorstellen voor dit paar" koos: de twee origins (bijvoorbeeld `https://example.com` en `https://staging.example.com`), geen paden | Zodat het sync-voorstel voor dat paar wegblijft | `chrome.storage.local` op je apparaat | Tot je op "Weggeklikte paren weer voorstellen" klikt of de extensie verwijdert (max. 200 paren) |
+
+De status op het extensie-icoon in de werkbalk en het sync-voorstel ("Sync starten? example.com ↔ staging.example.com") worden in je browser bepaald aan de hand van de adressen van de twee tabbladen; daarover verlaat niets de browser en er gaat niets naar een van de websites.
 
 Elementbeschrijvingen, getypte tekst, de positie van de muisaanwijzer, overlay-afbeeldingen en CSS-waarden worden binnen de extensie rechtstreeks tussen je twee tabbladen doorgegeven en niet opgeslagen. Een CSV-export van een checklist ontstaat alleen als je op "CSV exporteren" klikt en wordt opgeslagen waar jij kiest.
 
