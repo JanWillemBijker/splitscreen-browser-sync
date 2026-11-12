@@ -253,5 +253,17 @@
   },
   "needPairHint": {
     "message": "Open two web pages in a Split View to use this."
+  },
+  "toastOffsetSet": {
+    "message": "Offset $OFFSET$ px",
+    "placeholders": {
+      "offset": {
+        "content": "$1",
+        "example": "+120"
+      }
+    }
+  },
+  "altHint": {
+    "message": "Tip: hold Alt (Option) while scrolling to move one side on its own; the difference becomes the offset."
   }
 }

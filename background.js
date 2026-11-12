@@ -58,7 +58,8 @@ const MSG = Object.freeze({
   FOCUS: 'SVSS_FOCUS',
   REMOTE_FOCUS: 'SVSS_REMOTE_FOCUS',
   POINTER: 'SVSS_POINTER',
-  REMOTE_POINTER: 'SVSS_REMOTE_POINTER'
+  REMOTE_POINTER: 'SVSS_REMOTE_POINTER',
+  ALT_COMMIT: 'SVSS_ALT_COMMIT'
 });
 
 const CMD = Object.freeze({
@@ -1400,6 +1401,43 @@ async function handlePointerMessage(sender, message) {
   });
 }
 
+const MAX_OFFSET = 100000;
+
+function formatSignedPx(value) {
+  const n = Math.round(Number(value) || 0);
+  return n > 0 ? `+${n}` : String(n);
+}
+
+// Alt (Option) was released after scrolling one pane on its own: the new
+// distance between the panes becomes the pair's vertical scroll offset
+// (right = left + offset). The sender reports its own position; the other
+// pane's position is read here.
+async function handleAltCommitMessage(sender, message) {
+  const tabId = sender.tab?.id;
+  const windowId = sender.tab?.windowId;
+  if (typeof tabId !== 'number' || typeof windowId !== 'number') return;
+
+  const group = await getGroupForTab(tabId, windowId);
+  if (!group || !group.enabled) return;
+  if (!(await isPairOnPinnedOrigins(group, tabId, sender.url))) return;
+
+  const peerTabId = getPeerTabId(group, tabId);
+  const peer = peerTabId ? await getCurrentScroll(peerTabId) : null;
+  if (!peer) return;
+
+  const ownY = Math.max(0, finiteOr(message.scrollY));
+  const leftY = tabId === group.leftTabId ? ownY : peer.scrollY;
+  const rightY = tabId === group.leftTabId ? peer.scrollY : ownY;
+  group.offsetY = Math.max(-MAX_OFFSET, Math.min(MAX_OFFSET, Math.round(rightY - leftY)));
+  group.lastKnownScrollX = Math.max(0, finiteOr(message.scrollX));
+  group.lastKnownScrollY = ownY;
+  group.lastSourceTabId = tabId;
+  group.error = null;
+  await saveStateNow();
+  await sendGroupState(group);
+  await safeSendMessage(tabId, { type: MSG.TOAST, text: t('toastOffsetSet', [formatSignedPx(group.offsetY)]) });
+}
+
 async function handleGetSplitStatusMessage(sender) {
   const tabId = sender.tab?.id;
   const windowId = sender.tab?.windowId;
@@ -1778,6 +1816,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     if (message.type === MSG.POINTER) {
       await handlePointerMessage(sender, message);
+      sendResponse({ ok: true });
+      return;
+    }
+
+    if (message.type === MSG.ALT_COMMIT) {
+      await handleAltCommitMessage(sender, message);
       sendResponse({ ok: true });
       return;
     }

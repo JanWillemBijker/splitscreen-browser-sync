@@ -39,7 +39,8 @@
     FOCUS: 'SVSS_FOCUS',
     REMOTE_FOCUS: 'SVSS_REMOTE_FOCUS',
     POINTER: 'SVSS_POINTER',
-    REMOTE_POINTER: 'SVSS_REMOTE_POINTER'
+    REMOTE_POINTER: 'SVSS_REMOTE_POINTER',
+    ALT_COMMIT: 'SVSS_ALT_COMMIT'
   });
 
   const CMD = Object.freeze({
@@ -319,6 +320,8 @@
       font-size: 12px;
       line-height: 1.4;
     }
+
+    .svss-help-after { margin: 8px 0 0; }
 
     .svss-btn {
       appearance: none;
@@ -870,6 +873,10 @@
     })));
     offsetRow.appendChild(createButton(t('btnReset', 'Reset'), CMD.OFFSET_RESET, 'svss-btn-quiet'));
     offsetSection.appendChild(offsetRow);
+    const altHint = document.createElement('p');
+    altHint.className = 'svss-help svss-help-after';
+    altHint.textContent = t('altHint', '');
+    offsetSection.appendChild(altHint);
     panel.appendChild(offsetSection);
 
     const reloadSection = createSection(t('sectionReload', 'Reload'));
@@ -1240,10 +1247,56 @@
     };
   }
 
+  // ---- Hold Alt (Option) = temporarily decouple ------------------------------
+  // While Alt is held, scrolling this pane is not mirrored. When Alt is
+  // released, the new distance between the panes becomes the pair's scroll
+  // offset. Alt is read from trusted input only (key events reach the focused
+  // pane, so wheel and pointer events, which reach the pane under the mouse,
+  // carry the modifier state too). Nothing is prevented: Alt shortcuts of the
+  // browser and the page keep working.
+  let altDecoupled = false;
+  let altScrolledWhileDecoupled = false;
+  let altCommitPending = false;
+
+  function setAltDecoupled(on) {
+    if (on === altDecoupled) return;
+    altDecoupled = on;
+    if (on || !altScrolledWhileDecoupled) return;
+    altScrolledWhileDecoupled = false;
+    if (!uiState.enabled) return;
+    // Hold scroll messages until the service worker has read both positions,
+    // otherwise a scroll right after releasing Alt could move the other pane
+    // before the offset is measured.
+    altCommitPending = true;
+    const { scrollX, scrollY } = readScrollPosition();
+    sendRuntimeMessage({ type: MSG.ALT_COMMIT, scrollX, scrollY }).finally(() => {
+      altCommitPending = false;
+      lastSentScrollX = null;
+      lastSentScrollY = null;
+      handleLocalScroll();
+    });
+  }
+
+  function trackAltFromPointer(event) {
+    if (!event.isTrusted || !uiState.enabled) return;
+    setAltDecoupled(Boolean(event.altKey));
+  }
+
+  function trackAltFromKey(event) {
+    if (!event.isTrusted || event.key !== 'Alt') return;
+    if (!uiState.enabled) return;
+    setAltDecoupled(event.type === 'keydown');
+  }
+
   function handleLocalScroll() {
     if (!uiState.enabled) return;          // nothing leaves the page unless this pair is syncing
     const now = performance.now();
     if (isApplyingRemoteScroll || now < suppressScrollUntil) return;
+    if (altDecoupled) {
+      altScrolledWhileDecoupled = true;
+      return;
+    }
+    if (altCommitPending) return;
     if (scrollRafPending) return;
 
     scrollRafPending = true;
@@ -1251,6 +1304,7 @@
       scrollRafPending = false;
       if (!uiState.enabled) return;
       if (isApplyingRemoteScroll || performance.now() < suppressScrollUntil) return;
+      if (altDecoupled || altCommitPending) return;
 
       const { scrollX, scrollY } = readScrollPosition();
       if (scrollX === lastSentScrollX && scrollY === lastSentScrollY) return;
@@ -2908,6 +2962,12 @@
   }, true);
 
   window.addEventListener('scroll', handleLocalScroll, { passive: true });
+  window.addEventListener('wheel', trackAltFromPointer, { capture: true, passive: true });
+  document.addEventListener('pointermove', trackAltFromPointer, { capture: true, passive: true });
+  document.addEventListener('pointerdown', trackAltFromPointer, { capture: true, passive: true });
+  window.addEventListener('keydown', trackAltFromKey, true);
+  window.addEventListener('keyup', trackAltFromKey, true);
+  window.addEventListener('blur', () => setAltDecoupled(false), true);
   document.addEventListener('click', handleLocalClick, true);
   document.addEventListener('focusin', handleLocalFocusIn, true);
   document.addEventListener('pointermove', handleLocalPointerMove, true);
