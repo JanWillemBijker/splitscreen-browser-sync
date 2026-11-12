@@ -277,5 +277,17 @@
   },
   "alignElement": {
     "message": "Op element/inhoud"
+  },
+  "optContainers": {
+    "message": "Scrollgebieden synchroniseren"
+  },
+  "optContainersHelp": {
+    "message": "Scrolt ook het overeenkomende scrollgebied aan de andere kant: zijpanelen, modals, lijsten."
+  },
+  "optZoom": {
+    "message": "Zoom synchroniseren"
+  },
+  "optZoomHelp": {
+    "message": "Inzoomen aan de ene kant (Ctrl/⌘ + of −) zoomt de andere kant naar hetzelfde niveau."
   }
 }

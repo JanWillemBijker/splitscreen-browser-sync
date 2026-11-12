@@ -20,7 +20,12 @@ const PAUSE_ORIGIN_CHANGED = 'origin-changed';
 // [group field, settings field holding the default, built-in default,
 //  on-page panel command]. They share the plumbing below (settings, pair
 // defaults, UI state, popup whitelist, panel commands).
-const EXTRA_BOOL_OPTIONS = Object.freeze([]);
+const EXTRA_BOOL_OPTIONS = Object.freeze([
+  // Scroll inside scroll containers (overflow areas, modals, side panels).
+  ['syncContainers', 'defaultSyncContainers', true, 'SET_CONTAINER_SYNC'],
+  // Browser zoom level of both panes.
+  ['syncZoom', 'defaultSyncZoom', true, 'SET_ZOOM_SYNC']
+]);
 
 // Per-pair options with a fixed set of values.
 const CHOICE_OPTIONS = Object.freeze({
@@ -79,7 +84,9 @@ const MSG = Object.freeze({
   REMOTE_FOCUS: 'SVSS_REMOTE_FOCUS',
   POINTER: 'SVSS_POINTER',
   REMOTE_POINTER: 'SVSS_REMOTE_POINTER',
-  ALT_COMMIT: 'SVSS_ALT_COMMIT'
+  ALT_COMMIT: 'SVSS_ALT_COMMIT',
+  CONTAINER_SCROLL: 'SVSS_CONTAINER_SCROLL',
+  REMOTE_CONTAINER_SCROLL: 'SVSS_REMOTE_CONTAINER_SCROLL'
 });
 
 const CMD = Object.freeze({
@@ -1008,6 +1015,7 @@ async function enableCurrentSplitView(tabId, windowId) {
   await saveStateNow();
   await sendGroupState(group);
   await alignPeerToSource(group, tabId);
+  await syncZoomFromTab(group, tabId);
   await sendGroupState(group);
 
   // Safety net: re-send the state once more shortly after.
@@ -1153,6 +1161,7 @@ async function setGroupBooleanOption(tabId, windowId, optionName, value) {
   group.error = null;
   await saveStateNow();
   await sendGroupState(group);
+  if (optionName === 'syncZoom' && group.enabled && value) await syncZoomFromTab(group, tabId);
 }
 
 async function setGroupChoiceOption(tabId, windowId, optionName, value) {
@@ -1546,6 +1555,91 @@ async function handleAltCommitMessage(sender, message) {
   await saveStateNow();
   await sendGroupState(group);
   await safeSendMessage(tabId, { type: MSG.TOAST, text: t('toastOffsetSet', [formatSignedPx(group.offsetY)]) });
+}
+
+// Scroll inside a scroll container (overflow area, modal, side panel): the
+// container's descriptor and scroll position (numbers) go to the other pane,
+// which finds the matching scrollable element. Like the page scroll, the
+// sender must be on its pinned origin; the receiver checks its own origin.
+async function handleContainerScrollMessage(sender, message) {
+  const tabId = sender.tab?.id;
+  const windowId = sender.tab?.windowId;
+  if (typeof tabId !== 'number' || typeof windowId !== 'number') return;
+
+  const group = await getGroupForTab(tabId, windowId);
+  if (!group || !group.enabled || !group.syncContainers || !group.originsPinned) return;
+  if (getOrigin(sender.url || sender.tab?.url) !== pinnedOriginFor(group, tabId)) return;
+
+  const targetTabId = getPeerTabId(group, tabId);
+  const targetOrigin = pinnedOriginFor(group, targetTabId);
+  if (!targetTabId || !targetOrigin) return;
+
+  const raw = plainObjectOr(message.container);
+  await safeSendMessage(targetTabId, {
+    type: MSG.REMOTE_CONTAINER_SCROLL,
+    targetOrigin,
+    alignMode: choiceOr('alignMode', group.alignMode),
+    container: {
+      ...sanitizeDescriptor(raw),
+      scrollTop: clampNumber(raw.scrollTop, 0, 10000000),
+      scrollLeft: clampNumber(raw.scrollLeft, 0, 10000000),
+      ratioY: clampNumber(raw.ratioY, 0, 1),
+      ratioX: clampNumber(raw.ratioX, 0, 1),
+      clientX: clampNumber(raw.clientX, -10000, 100000),
+      clientY: clampNumber(raw.clientY, -10000, 100000),
+      vw: clampNumber(raw.vw, 0, 100000),
+      vh: clampNumber(raw.vh, 0, 100000)
+    }
+  });
+}
+
+// ---- Zoom sync -------------------------------------------------------------
+// When one pane of a syncing pair is zoomed, the other pane gets the same
+// zoom factor. The factor we set is remembered so the resulting
+// onZoomChange of the other pane does not bounce back (no loop).
+const expectedZoom = new Map();
+const ZOOM_EPSILON = 0.001;
+
+async function applyZoomToPeer(group, sourceTabId, factor) {
+  const peerTabId = getPeerTabId(group, sourceTabId);
+  if (!peerTabId || !Number.isFinite(factor) || factor <= 0) return;
+  let current = null;
+  try { current = await chrome.tabs.getZoom(peerTabId); } catch (_error) { return; }
+  if (Math.abs(current - factor) < ZOOM_EPSILON) return;
+  expectedZoom.set(peerTabId, factor);
+  setTimeout(() => {
+    if (expectedZoom.get(peerTabId) === factor) expectedZoom.delete(peerTabId);
+  }, 2000);
+  try {
+    await chrome.tabs.setZoom(peerTabId, factor);
+  } catch (error) {
+    expectedZoom.delete(peerTabId);
+    debug('tabs.setZoom failed', peerTabId, error?.message || error);
+  }
+}
+
+async function handleZoomChange(tabId, newZoomFactor) {
+  const expected = expectedZoom.get(tabId);
+  if (expected !== undefined && Math.abs(expected - newZoomFactor) < ZOOM_EPSILON) {
+    expectedZoom.delete(tabId);
+    return;
+  }
+  const state = await getState();
+  const group = state.groups[state.tabToGroupKey[String(tabId)]];
+  if (!group || !group.enabled || !group.syncZoom) return;
+  if (!(await isPairOnPinnedOrigins(group, tabId))) return;
+  await applyZoomToPeer(group, tabId, newZoomFactor);
+}
+
+// Gives the other pane the zoom of `sourceTabId` (on Start sync and when the
+// option is switched on).
+async function syncZoomFromTab(group, sourceTabId) {
+  if (!group?.enabled || !group.syncZoom) return;
+  try {
+    await applyZoomToPeer(group, sourceTabId, await chrome.tabs.getZoom(sourceTabId));
+  } catch (error) {
+    debug('zoom alignment failed', error?.message || error);
+  }
 }
 
 async function handleGetSplitStatusMessage(sender) {
@@ -1942,6 +2036,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return;
     }
 
+    if (message.type === MSG.CONTAINER_SCROLL) {
+      await handleContainerScrollMessage(sender, message);
+      sendResponse({ ok: true });
+      return;
+    }
+
     if (message.type === MSG.ALT_COMMIT) {
       await handleAltCommitMessage(sender, message);
       sendResponse({ ok: true });
@@ -2190,6 +2290,12 @@ async function handleTabUpdated(tabId, changeInfo, tab) {
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (!tab || typeof tab.windowId !== 'number') return;
   runForTab(tabId, () => handleTabUpdated(tabId, changeInfo, tab));
+});
+
+chrome.tabs.onZoomChange.addListener((zoomChangeInfo) => {
+  const { tabId, newZoomFactor } = zoomChangeInfo || {};
+  if (typeof tabId !== 'number' || !Number.isFinite(newZoomFactor)) return;
+  handleZoomChange(tabId, newZoomFactor).catch((error) => debug('onZoomChange error', error));
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {

@@ -40,7 +40,9 @@
     REMOTE_FOCUS: 'SVSS_REMOTE_FOCUS',
     POINTER: 'SVSS_POINTER',
     REMOTE_POINTER: 'SVSS_REMOTE_POINTER',
-    ALT_COMMIT: 'SVSS_ALT_COMMIT'
+    ALT_COMMIT: 'SVSS_ALT_COMMIT',
+    CONTAINER_SCROLL: 'SVSS_CONTAINER_SCROLL',
+    REMOTE_CONTAINER_SCROLL: 'SVSS_REMOTE_CONTAINER_SCROLL'
   });
 
   const CMD = Object.freeze({
@@ -62,7 +64,9 @@
     SET_CLICK_MIRRORING: 'SET_CLICK_MIRRORING',
     SET_HOVER_MIRRORING: 'SET_HOVER_MIRRORING',
     SET_SHOW_CURSOR: 'SET_SHOW_CURSOR',
-    SET_ALIGN_MODE: 'SET_ALIGN_MODE'
+    SET_ALIGN_MODE: 'SET_ALIGN_MODE',
+    SET_CONTAINER_SYNC: 'SET_CONTAINER_SYNC',
+    SET_ZOOM_SYNC: 'SET_ZOOM_SYNC'
   });
 
   const HOST_ID = 'svss-root';
@@ -887,6 +891,8 @@
     optionsSection.appendChild(createToggle(t('optClicks', 'Mirror clicks'), uiState.mirrorClicks, CMD.SET_CLICK_MIRRORING));
     optionsSection.appendChild(createToggle(t('optHover', 'Mirror hover effects'), uiState.mirrorHover, CMD.SET_HOVER_MIRRORING));
     optionsSection.appendChild(createToggle(t('optCursor', 'Show mouse cursor'), uiState.showCursor, CMD.SET_SHOW_CURSOR));
+    optionsSection.appendChild(createToggle(t('optContainers', 'Sync scroll areas'), uiState.syncContainers, CMD.SET_CONTAINER_SYNC));
+    optionsSection.appendChild(createToggle(t('optZoom', 'Sync zoom'), uiState.syncZoom, CMD.SET_ZOOM_SYNC));
     optionsSection.appendChild(createToggle(t('optWpAdminBar', 'Hide WordPress admin bar'), uiState.hideWpAdminBar, CMD.SET_WP_ADMIN_BAR));
     panel.appendChild(optionsSection);
 
@@ -1368,6 +1374,128 @@
       const anchor = uiState.alignMode === 'element' ? buildScrollAnchor() : null;
       await sendRuntimeMessage({ type: MSG.SCROLL, scrollX, scrollY, anchor, timestamp: Date.now() });
     });
+  }
+
+  // ---- Scroll containers ---------------------------------------------------------
+  // Scrolling inside an element (overflow area, modal, side panel) sends the
+  // element's descriptor (plus a class-based hint) and its scroll position.
+  // The other pane finds the matching element that can scroll and applies the
+  // same position (pixel mode) or the same percentage (element mode).
+  const containerDescriptorCache = new WeakMap();
+  const remoteContainerQuietUntil = new WeakMap();
+  const pendingContainers = new Set();
+  let containerRafPending = false;
+  let lastContainerKey = null;
+  let lastContainerElement = null;
+
+  function canScroll(element) {
+    if (!(element instanceof Element)) return false;
+    if (element.scrollHeight <= element.clientHeight + 1 && element.scrollWidth <= element.clientWidth + 1) return false;
+    try {
+      const style = getComputedStyle(element);
+      return /(auto|scroll|overlay|hidden)/.test(`${style.overflowY} ${style.overflowX}`);
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  function buildContainerDescriptor(element) {
+    let descriptor = containerDescriptorCache.get(element);
+    if (descriptor) return descriptor;
+    descriptor = buildElementDescriptor(element);
+    const classes = Array.from(element.classList || [])
+      .filter((name) => /^[a-zA-Z_][\w-]{0,40}$/.test(name) && !name.startsWith('svss-'))
+      .slice(0, 3);
+    if (classes.length) {
+      const selector = `${element.tagName.toLowerCase()}.${classes.map(cssEscape).join('.')}`;
+      descriptor = { ...descriptor, candidates: [...descriptor.candidates.slice(0, 9), { type: 'css', value: selector, strong: false }] };
+    }
+    containerDescriptorCache.set(element, descriptor);
+    return descriptor;
+  }
+
+  function flushContainerScrolls() {
+    containerRafPending = false;
+    if (!uiState.enabled || !uiState.syncContainers) {
+      pendingContainers.clear();
+      return;
+    }
+    for (const element of pendingContainers) {
+      if (!element.isConnected) continue;
+      const rect = element.getBoundingClientRect();
+      const maxY = Math.max(0, element.scrollHeight - element.clientHeight);
+      const maxX = Math.max(0, element.scrollWidth - element.clientWidth);
+      sendRuntimeMessage({
+        type: MSG.CONTAINER_SCROLL,
+        container: {
+          ...buildContainerDescriptor(element),
+          scrollTop: element.scrollTop,
+          scrollLeft: element.scrollLeft,
+          ratioY: maxY ? element.scrollTop / maxY : 0,
+          ratioX: maxX ? element.scrollLeft / maxX : 0,
+          clientX: rect.left + rect.width / 2,
+          clientY: rect.top + rect.height / 2,
+          vw: window.innerWidth || 0,
+          vh: window.innerHeight || 0
+        }
+      });
+    }
+    pendingContainers.clear();
+  }
+
+  function handleContainerScroll(event) {
+    if (!uiState.enabled || !uiState.syncContainers || altDecoupled) return;
+    const element = event.target;
+    if (!(element instanceof Element)) return; // the page itself: handleLocalScroll
+    if (element === document.documentElement || element === document.body || element === document.scrollingElement) return;
+    if (isOurHost(element)) return;
+    if ((remoteContainerQuietUntil.get(element) || 0) > performance.now()) return;
+    pendingContainers.add(element);
+    if (containerRafPending) return;
+    containerRafPending = true;
+    requestAnimationFrame(flushContainerScrolls);
+  }
+
+  function resolveContainer(payload) {
+    const candidates = Array.isArray(payload?.candidates) ? payload.candidates : [];
+    if (!candidates.length) return null;
+    const key = JSON.stringify(candidates);
+    if (key === lastContainerKey && lastContainerElement?.isConnected && canScroll(lastContainerElement)) return lastContainerElement;
+
+    const { x, y } = mirroredPointToLocal(payload);
+    let found = null;
+    for (const strongPass of [true, false]) {
+      for (const candidate of candidates) {
+        if (Boolean(candidate.strong) !== strongPass) continue;
+        const matches = matchAllElements(candidate).filter((element) => canScroll(element) && !isOurHost(element));
+        if (matches.length) {
+          found = pickClosestToPoint(matches, x, y);
+          break;
+        }
+      }
+      if (found) break;
+    }
+    lastContainerKey = key;
+    lastContainerElement = found;
+    return found;
+  }
+
+  function applyRemoteContainerScroll(payload, alignMode) {
+    if (!uiState.enabled || !uiState.syncContainers || !payload) return;
+    const element = resolveContainer(payload);
+    if (!element) return;
+    let top = Number(payload.scrollTop) || 0;
+    let left = Number(payload.scrollLeft) || 0;
+    if (alignMode === 'element') {
+      top = (Number(payload.ratioY) || 0) * Math.max(0, element.scrollHeight - element.clientHeight);
+      left = (Number(payload.ratioX) || 0) * Math.max(0, element.scrollWidth - element.clientWidth);
+    }
+    remoteContainerQuietUntil.set(element, performance.now() + 150);
+    const previous = element.style.scrollBehavior;
+    element.style.scrollBehavior = 'auto';
+    element.scrollTop = Math.round(top);
+    element.scrollLeft = Math.round(left);
+    element.style.scrollBehavior = previous;
   }
 
   // ---- Alignment "on element/content" ------------------------------------------
@@ -3053,6 +3181,12 @@
       return false;
     }
 
+    if (message.type === MSG.REMOTE_CONTAINER_SCROLL) {
+      if (isForThisOrigin(message)) applyRemoteContainerScroll(message.container, message.alignMode);
+      sendResponse({ ok: true });
+      return false;
+    }
+
     if (message.type === MSG.REMOTE_CLICK) {
       if (isForThisOrigin(message)) applyRemoteClick(message.click);
       sendResponse({ ok: true });
@@ -3128,6 +3262,7 @@
   }, true);
 
   window.addEventListener('scroll', handleLocalScroll, { passive: true });
+  document.addEventListener('scroll', handleContainerScroll, { capture: true, passive: true });
   window.addEventListener('wheel', trackAltFromPointer, { capture: true, passive: true });
   document.addEventListener('pointermove', trackAltFromPointer, { capture: true, passive: true });
   document.addEventListener('pointerdown', trackAltFromPointer, { capture: true, passive: true });

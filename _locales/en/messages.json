@@ -277,5 +277,17 @@
   },
   "alignElement": {
     "message": "On element/content"
+  },
+  "optContainers": {
+    "message": "Sync scroll areas"
+  },
+  "optContainersHelp": {
+    "message": "Also scrolls the matching scrollable area on the other side: side panels, modals, lists."
+  },
+  "optZoom": {
+    "message": "Sync zoom"
+  },
+  "optZoomHelp": {
+    "message": "Zooming one side (Ctrl/⌘ + or −) zooms the other side to the same level."
   }
 }
