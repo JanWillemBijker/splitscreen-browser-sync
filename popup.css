@@ -616,6 +616,94 @@ details[open] > .group-summary .chevron {
   transform: translateX(14px);
 }
 
+/* Compare tab ----------------------------------------------------------- */
+
+.btn-small {
+  min-height: 30px;
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.sizes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-3);
+}
+
+.size {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.size dt {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.size dd {
+  margin: 0;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.segmented {
+  display: inline-grid;
+  grid-auto-flow: column;
+  gap: 2px;
+  margin-bottom: var(--space-2);
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--tint-neutral);
+}
+
+.segment {
+  position: relative;
+  cursor: pointer;
+}
+
+.segment input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.segment span {
+  display: block;
+  padding: 3px 12px;
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.segment input:checked + span {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+.segment input:focus-visible + span {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.presets {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--space-1);
+}
+
+.result-line {
+  min-height: 1.4em;
+  margin-top: var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
 /* Footer --------------------------------------------------------------- */
 
 .footer {

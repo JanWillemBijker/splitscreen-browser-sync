@@ -295,5 +295,58 @@
   },
   "optInputHelp": {
     "message": "Copies what you type and pick in form fields to the matching field on the other side. The other site receives that text. Never passwords, codes, payment or file fields; never submits."
+  },
+  "tabCompare": {
+    "message": "Compare"
+  },
+  "sectionPaneSizes": {
+    "message": "Pane sizes"
+  },
+  "paneSizesHelp": {
+    "message": "Chrome has no setting for the divider, so a preset resizes the window until the chosen pane has that width. The other pane changes along."
+  },
+  "paneSizeUnknown": {
+    "message": "unknown"
+  },
+  "presetSideLabel": {
+    "message": "Pane to resize"
+  },
+  "presetGroupLabel": {
+    "message": "Width presets"
+  },
+  "presetReached": {
+    "message": "The $SIDE$ pane is now $WIDTH$ px wide.",
+    "placeholders": {
+      "side": {
+        "content": "$1",
+        "example": "left"
+      },
+      "width": {
+        "content": "$2",
+        "example": "768"
+      }
+    }
+  },
+  "presetLimited": {
+    "message": "Not enough room on the screen: the $SIDE$ pane is $WIDTH$ px wide.",
+    "placeholders": {
+      "side": {
+        "content": "$1",
+        "example": "left"
+      },
+      "width": {
+        "content": "$2",
+        "example": "1180"
+      }
+    }
+  },
+  "presetFailed": {
+    "message": "The window could not be resized."
+  },
+  "sideLeftLower": {
+    "message": "left"
+  },
+  "sideRightLower": {
+    "message": "right"
   }
 }

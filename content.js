@@ -44,6 +44,8 @@
     CONTAINER_SCROLL: 'SVSS_CONTAINER_SCROLL',
     REMOTE_CONTAINER_SCROLL: 'SVSS_REMOTE_CONTAINER_SCROLL',
     FIELD_INPUT: 'SVSS_FIELD_INPUT',
+    VIEWPORT: 'SVSS_VIEWPORT',
+    GET_VIEWPORT: 'SVSS_GET_VIEWPORT',
     REMOTE_FIELD_INPUT: 'SVSS_REMOTE_FIELD_INPUT'
   });
 
@@ -470,6 +472,7 @@
     .svss-reload-side {
       color: var(--muted);
       font-size: 12px;
+      font-variant-numeric: tabular-nums;
     }
 
     .svss-footer {
@@ -951,7 +954,8 @@
       column.setAttribute('role', 'group');
       const heading = document.createElement('span');
       heading.className = 'svss-reload-side';
-      heading.textContent = t(side === 'left' ? 'colLeft' : 'colRight', side);
+      const size = uiState.paneSizes?.[side];
+      heading.textContent = t(side === 'left' ? 'colLeft' : 'colRight', side) + (size ? ` · ${size.w} × ${size.h}` : '');
       column.appendChild(heading);
       const isLeft = side === 'left';
       column.appendChild(createButton(t('btnReload', 'Reload'), isLeft ? CMD.RELOAD_LEFT : CMD.RELOAD_RIGHT, '', null, {
@@ -3302,10 +3306,27 @@
     return true;
   }
 
+  function readViewport() {
+    return {
+      w: Math.round(window.innerWidth || document.documentElement?.clientWidth || 0),
+      h: Math.round(window.innerHeight || document.documentElement?.clientHeight || 0)
+    };
+  }
+
   async function sendReady() {
     const { scrollX, scrollY } = readScrollPosition();
-    await sendRuntimeMessage({ type: MSG.READY, scrollX, scrollY, url: location.href, timestamp: Date.now() });
+    await sendRuntimeMessage({ type: MSG.READY, scrollX, scrollY, url: location.href, viewport: readViewport(), timestamp: Date.now() });
   }
+
+  // Viewport size for the pane-size display; numbers only, after resizing stops.
+  let viewportTimer = null;
+  window.addEventListener('resize', () => {
+    if (viewportTimer) clearTimeout(viewportTimer);
+    viewportTimer = setTimeout(() => {
+      viewportTimer = null;
+      if (uiState.show || uiState.enabled) sendRuntimeMessage({ type: MSG.VIEWPORT, viewport: readViewport() });
+    }, 250);
+  });
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // Only the extension's own service worker talks to this script.
@@ -3349,6 +3370,16 @@
       renderRulers();
       updateUi();
       sendResponse({ ok: true });
+      return false;
+    }
+
+    if (message.type === MSG.GET_VIEWPORT) {
+      const scr = window.screen || {};
+      sendResponse({
+        ok: true,
+        viewport: readViewport(),
+        screen: { availWidth: Number(scr.availWidth) || 0, availLeft: Number(scr.availLeft) || 0 }
+      });
       return false;
     }
 

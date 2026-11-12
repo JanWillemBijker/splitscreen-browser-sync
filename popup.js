@@ -8,6 +8,7 @@ const MSG = Object.freeze({
   POPUP_SET_SYNC: 'SVSS_POPUP_SET_SYNC',
   POPUP_SET_GROUP_OPTION: 'SVSS_POPUP_SET_GROUP_OPTION',
   POPUP_SET_GROUP_CHOICE: 'SVSS_POPUP_SET_GROUP_CHOICE',
+  POPUP_SET_PANE_WIDTH: 'SVSS_POPUP_SET_PANE_WIDTH',
   POPUP_RULER_ADD: 'SVSS_POPUP_RULER_ADD'
 });
 
@@ -200,9 +201,22 @@ function renderStatus(status) {
     if (typeof group[select.dataset.groupChoice] === 'string') select.value = group[select.dataset.groupChoice];
   }
 
+  for (const el of document.querySelectorAll('[data-needs-pair]')) el.hidden = !inSplit;
+  for (const el of document.querySelectorAll('[data-need-pair-hint]')) el.hidden = inSplit;
+  renderPaneSizes(group.paneSizes || {});
+
   showCurrent.disabled = !inSplit;
   addRuler.disabled = !inSplit;
   showCurrent.textContent = t(status?.buttonShownForCurrent ? 'btnHidePanel' : 'btnShowPanel');
+}
+
+function formatSize(size) {
+  return size && size.w && size.h ? `${size.w} × ${size.h}` : t('paneSizeUnknown');
+}
+
+function renderPaneSizes(sizes) {
+  $('sizeLeft').textContent = formatSize(sizes.left);
+  $('sizeRight').textContent = formatSize(sizes.right);
 }
 
 async function run(message) {
@@ -270,6 +284,27 @@ addRuler.addEventListener('click', async () => {
   await sendMessage({ type: MSG.POPUP_RULER_ADD });
   await refresh();
 });
+
+for (const button of document.querySelectorAll('[data-preset]')) {
+  button.addEventListener('click', async () => {
+    if (busy) return;
+    busy = true;
+    root.setAttribute('aria-busy', 'true');
+    const side = document.querySelector('input[name="presetSide"]:checked')?.value === 'right' ? 'right' : 'left';
+    const result = $('presetResult');
+    result.textContent = '';
+    try {
+      const response = await sendMessage({ type: MSG.POPUP_SET_PANE_WIDTH, side, width: Number(button.dataset.preset) });
+      if (response?.status) renderStatus(response.status);
+      const sideText = t(side === 'right' ? 'sideRightLower' : 'sideLeftLower');
+      if (!response?.ok || !response.width) result.textContent = t('presetFailed');
+      else result.textContent = t(response.reached ? 'presetReached' : 'presetLimited', [sideText, String(response.width)]);
+    } finally {
+      busy = false;
+      root.removeAttribute('aria-busy');
+    }
+  });
+}
 
 $('openShortcuts').addEventListener('click', () => {
   chrome.tabs.create({ url: 'chrome://extensions/shortcuts' }).catch(() => undefined);

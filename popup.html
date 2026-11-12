@@ -43,6 +43,7 @@
 
     <div class="tabs" role="tablist" data-i18n-aria="tabsLabel">
       <button type="button" class="tab" role="tab" id="tab-sync" aria-controls="panel-sync" data-tab="sync" data-i18n="tabSync"></button>
+      <button type="button" class="tab" role="tab" id="tab-compare" aria-controls="panel-compare" data-tab="compare" data-i18n="tabCompare"></button>
       <button type="button" class="tab" role="tab" id="tab-settings" aria-controls="panel-settings" data-tab="settings" data-i18n="tabSettings"></button>
     </div>
 
@@ -137,6 +138,34 @@
             </button>
             <button id="showCurrent" type="button" class="btn btn-secondary"></button>
           </div>
+        </div>
+      </section>
+
+      <!-- Compare: pane sizes, overlay, CSS differences. -->
+      <section class="panel" role="tabpanel" id="panel-compare" aria-labelledby="tab-compare" tabindex="0" hidden>
+        <p class="empty-hint" data-need-pair-hint data-i18n="needPairHint"></p>
+
+        <div class="group" id="sizesGroup" data-needs-pair>
+          <div class="group-head">
+            <h2 class="group-title" data-i18n="sectionPaneSizes"></h2>
+            <p class="group-help" data-i18n="paneSizesHelp"></p>
+          </div>
+          <dl class="sizes">
+            <div class="size"><dt data-i18n="colLeft"></dt><dd id="sizeLeft">–</dd></div>
+            <div class="size"><dt data-i18n="colRight"></dt><dd id="sizeRight">–</dd></div>
+          </dl>
+          <div class="segmented" role="radiogroup" data-i18n-aria="presetSideLabel">
+            <label class="segment"><input type="radio" name="presetSide" value="left" checked><span data-i18n="colLeft"></span></label>
+            <label class="segment"><input type="radio" name="presetSide" value="right"><span data-i18n="colRight"></span></label>
+          </div>
+          <div class="presets" role="group" data-i18n-aria="presetGroupLabel">
+            <button type="button" class="btn btn-secondary btn-small" data-preset="375">375</button>
+            <button type="button" class="btn btn-secondary btn-small" data-preset="768">768</button>
+            <button type="button" class="btn btn-secondary btn-small" data-preset="1024">1024</button>
+            <button type="button" class="btn btn-secondary btn-small" data-preset="1280">1280</button>
+            <button type="button" class="btn btn-secondary btn-small" data-preset="1440">1440</button>
+          </div>
+          <p class="result-line" id="presetResult" role="status" aria-live="polite"></p>
         </div>
       </section>
 

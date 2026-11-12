@@ -91,6 +91,9 @@ const MSG = Object.freeze({
   CONTAINER_SCROLL: 'SVSS_CONTAINER_SCROLL',
   REMOTE_CONTAINER_SCROLL: 'SVSS_REMOTE_CONTAINER_SCROLL',
   FIELD_INPUT: 'SVSS_FIELD_INPUT',
+  VIEWPORT: 'SVSS_VIEWPORT',
+  GET_VIEWPORT: 'SVSS_GET_VIEWPORT',
+  POPUP_SET_PANE_WIDTH: 'SVSS_POPUP_SET_PANE_WIDTH',
   REMOTE_FIELD_INPUT: 'SVSS_REMOTE_FIELD_INPUT'
 });
 
@@ -655,6 +658,7 @@ function buildUiStateForTab(group, tabId, show = true) {
     ...extraOptionValues(group),
     wpAdminBarHidden: enabled && Boolean(group.hideWpAdminBar),
     rulers: Array.isArray(group.rulers) ? group.rulers : [],
+    paneSizes: paneSizesFor(group),
     color,
     statusText,
     reloading,
@@ -841,6 +845,134 @@ async function scanWindow(windowId = null) {
 
   scheduleSaveState();
   return state;
+}
+
+// ---- Pane sizes -------------------------------------------------------------
+// Each pane reports its viewport size (CSS pixels) when it loads and after a
+// resize. Chrome has no API to move the Split View divider, so a width
+// preset resizes the browser window until the chosen pane has that width
+// (the divider keeps its ratio, so the other pane changes too).
+const PANE_PRESETS = Object.freeze([375, 768, 1024, 1280, 1440]);
+const MIN_PANE_WIDTH = 200;
+const MAX_PANE_WIDTH = 8000;
+
+function sanitizeViewport(raw) {
+  const v = plainObjectOr(raw);
+  const w = Math.round(clampNumber(v.w, 0, 100000));
+  const h = Math.round(clampNumber(v.h, 0, 100000));
+  return w && h ? { w, h } : null;
+}
+
+function paneSizesFor(group) {
+  const sizes = plainObjectOr(group?.viewports);
+  return {
+    left: sizes[String(group?.leftTabId)] || null,
+    right: sizes[String(group?.rightTabId)] || null
+  };
+}
+
+function storeViewport(group, tabId, raw) {
+  const size = sanitizeViewport(raw);
+  if (!group || !size) return false;
+  group.viewports = plainObjectOr(group.viewports);
+  const key = String(tabId);
+  const previous = group.viewports[key];
+  if (previous && previous.w === size.w && previous.h === size.h) return false;
+  group.viewports[key] = size;
+  // Forget sizes of tabs that left the pair.
+  for (const id of Object.keys(group.viewports)) {
+    if (id !== String(group.leftTabId) && id !== String(group.rightTabId)) delete group.viewports[id];
+  }
+  return true;
+}
+
+async function handleViewportMessage(sender, message) {
+  const tabId = sender.tab?.id;
+  const windowId = sender.tab?.windowId;
+  if (typeof tabId !== 'number' || typeof windowId !== 'number') return;
+  const group = await getGroupForTab(tabId, windowId);
+  if (!group) return;
+  if (storeViewport(group, tabId, message.viewport)) {
+    scheduleSaveState();
+    await sendGroupState(group);
+  }
+}
+
+async function readViewport(tabId) {
+  const response = await safeSendMessage(tabId, { type: MSG.GET_VIEWPORT });
+  if (!response?.ok) return null;
+  return {
+    size: sanitizeViewport(response.viewport),
+    screen: plainObjectOr(response.screen)
+  };
+}
+
+const sleepMs = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Resizes the window so the pane `tabId` gets `targetWidth` CSS pixels.
+// Pane width is close to linear in the window width (ratio of the divider),
+// so a few secant steps converge. Returns { width, reached, limited }.
+async function resizePaneTo(group, tabId, targetWidth) {
+  const target = Math.round(clampNumber(targetWidth, MIN_PANE_WIDTH, MAX_PANE_WIDTH));
+  let win = await chrome.windows.get(group.windowId);
+  if (win.state !== 'normal') {
+    await chrome.windows.update(win.id, { state: 'normal' });
+    await sleepMs(300);
+    win = await chrome.windows.get(group.windowId);
+  }
+  let reading = await readViewport(tabId);
+  if (!reading?.size) return { width: null, reached: false, limited: false };
+
+  const screen = reading.screen;
+  const availWidth = Math.round(clampNumber(screen.availWidth, 0, 100000)) || null;
+  const availLeft = Math.round(clampNumber(screen.availLeft, -100000, 100000));
+  let windowWidth = win.width;
+  let paneWidth = reading.size.w;
+  let ratio = paneWidth / Math.max(1, windowWidth);
+  let limited = false;
+
+  for (let step = 0; step < 4 && Math.abs(paneWidth - target) > 1; step += 1) {
+    let next = Math.round(windowWidth + (target - paneWidth) / Math.max(0.05, ratio));
+    if (availWidth && next > availWidth) { next = availWidth; limited = true; }
+    if (next < 400) { next = 400; limited = true; }
+    if (next === windowWidth) break;
+    const update = { width: next };
+    if (availWidth && win.left + next > availLeft + availWidth) update.left = Math.max(availLeft, availLeft + availWidth - next);
+    await chrome.windows.update(win.id, update);
+    await sleepMs(250);
+    win = await chrome.windows.get(group.windowId);
+    reading = await readViewport(tabId);
+    if (!reading?.size) break;
+    const measured = reading.size.w;
+    if (win.width !== windowWidth && measured !== paneWidth) ratio = (measured - paneWidth) / (win.width - windowWidth);
+    windowWidth = win.width;
+    paneWidth = measured;
+    if (limited) break;
+  }
+
+  if (reading?.size) storeViewport(group, tabId, reading.size);
+  const other = getPeerTabId(group, tabId);
+  const otherReading = other ? await readViewport(other) : null;
+  if (otherReading?.size) storeViewport(group, other, otherReading.size);
+  scheduleSaveState();
+  await sendGroupState(group);
+  return { width: paneWidth, reached: Math.abs(paneWidth - target) <= 1, limited };
+}
+
+async function setPaneWidthForActiveSplit(side, width) {
+  const activeTab = await getActiveTab();
+  if (!activeTab?.id || typeof activeTab.windowId !== 'number') return { ok: false };
+  await scanWindow(activeTab.windowId);
+  const group = await getGroupForTab(activeTab.id, activeTab.windowId);
+  if (!group) return { ok: false };
+  const tabId = side === 'right' ? group.rightTabId : group.leftTabId;
+  try {
+    const result = await resizePaneTo(group, tabId, width);
+    return { ok: true, side: side === 'right' ? 'right' : 'left', target: Math.round(width), ...result };
+  } catch (error) {
+    debug('pane resize failed', error?.message || error);
+    return { ok: false };
+  }
 }
 
 async function getGroupForTab(tabId, forceScanWindowId = null) {
@@ -1751,6 +1883,7 @@ async function handleReadyMessage(sender, message) {
   // not report a new "complete").
   const wasReloading = clearTabReloading(group, tabId);
 
+  storeViewport(group, tabId, message.viewport);
   if (Number.isFinite(message.scrollX)) group.lastKnownScrollX = Math.max(0, message.scrollX);
   if (Number.isFinite(message.scrollY)) group.lastKnownScrollY = Math.max(0, message.scrollY);
   if (isNormalHttpUrl(message.url)) {
@@ -1875,6 +2008,7 @@ function summarizeGroupForPopup(group) {
     showCursor: Boolean(group.showCursor),
     ...extraOptionValues(group),
     hideWpAdminBar: Boolean(group.hideWpAdminBar),
+    paneSizes: paneSizesFor(group),
     rulerCount: Array.isArray(group.rulers) ? group.rulers.length : 0
   };
 }
@@ -2081,6 +2215,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === MSG.POINTER) {
       await handlePointerMessage(sender, message);
       sendResponse({ ok: true });
+      return;
+    }
+
+    if (message.type === MSG.VIEWPORT) {
+      await handleViewportMessage(sender, message);
+      sendResponse({ ok: true });
+      return;
+    }
+
+    if (message.type === MSG.POPUP_SET_PANE_WIDTH) {
+      const width = Number(message.width);
+      if (!PANE_PRESETS.includes(width) && !(Number.isInteger(width) && width >= MIN_PANE_WIDTH && width <= MAX_PANE_WIDTH)) {
+        sendResponse({ ok: false });
+        return;
+      }
+      const result = await setPaneWidthForActiveSplit(message.side === 'right' ? 'right' : 'left', width);
+      sendResponse({ ...result, status: await getPopupStatus() });
       return;
     }
 

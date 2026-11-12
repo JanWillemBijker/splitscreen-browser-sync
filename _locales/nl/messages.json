@@ -295,5 +295,58 @@
   },
   "optInputHelp": {
     "message": "Kopieert wat je typt en kiest in formuliervelden naar het overeenkomende veld aan de andere kant. De andere site ontvangt die tekst. Nooit wachtwoorden, codes, betaal- of bestandsvelden; verstuurt nooit iets."
+  },
+  "tabCompare": {
+    "message": "Vergelijken"
+  },
+  "sectionPaneSizes": {
+    "message": "Breedte van de helften"
+  },
+  "paneSizesHelp": {
+    "message": "Chrome heeft geen instelling voor de scheidingslijn. Een voorinstelling past daarom het venster aan tot de gekozen helft die breedte heeft. De andere helft verandert mee."
+  },
+  "paneSizeUnknown": {
+    "message": "onbekend"
+  },
+  "presetSideLabel": {
+    "message": "Helft om aan te passen"
+  },
+  "presetGroupLabel": {
+    "message": "Breedte-voorinstellingen"
+  },
+  "presetReached": {
+    "message": "De helft $SIDE$ is nu $WIDTH$ px breed.",
+    "placeholders": {
+      "side": {
+        "content": "$1",
+        "example": "left"
+      },
+      "width": {
+        "content": "$2",
+        "example": "768"
+      }
+    }
+  },
+  "presetLimited": {
+    "message": "Niet genoeg ruimte op het scherm: de helft $SIDE$ is $WIDTH$ px breed.",
+    "placeholders": {
+      "side": {
+        "content": "$1",
+        "example": "left"
+      },
+      "width": {
+        "content": "$2",
+        "example": "1180"
+      }
+    }
+  },
+  "presetFailed": {
+    "message": "Het venster kon niet worden aangepast."
+  },
+  "sideLeftLower": {
+    "message": "links"
+  },
+  "sideRightLower": {
+    "message": "rechts"
   }
 }
