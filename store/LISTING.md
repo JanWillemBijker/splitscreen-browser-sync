@@ -25,9 +25,10 @@ What it does
 • Pixel-exact scroll sync in both directions, without smoothing or lag
 • Every Split View pair stays separate, even with ten pairs open
 • Keeps syncing after a normal or hard reload of either side
-• Sync navigation: follow a link on one side and the other side opens the same path on its own domain (live ↔ staging)
-• Mirror clicks: open menus, accordions and modals on both sides at once
-• Mirror hover effects: see CSS hover styles and hover menus on both sides
+• Sync navigation (on by default): follow a link on one side and the other side opens the same path on its own domain (live ↔ staging)
+• Origin pinning: everything is mirrored only between the two sites you pressed Start sync for; if a pane opens another site, sync pauses until you start it again
+• Mirror hover effects (on by default): see CSS hover styles and hover menus on both sides
+• Mirror clicks (off by default): open menus, accordions and modals on both sides at once. Submit buttons, forms that post data and delete/pay/confirm/log-out actions are never clicked on the other side
 • Scroll offset in pixels when one layout is taller than the other
 • Synced ruler lines to check alignment
 • Optionally hides the WordPress admin bar so both layouts line up
@@ -40,7 +41,7 @@ How to use it
 3. Open the extension and press Start sync, or use the floating button on the page.
 
 Privacy
-No account, no tracking, no analytics, no remote code. Your settings stay in your browser. Password and payment fields are never read or mirrored.
+No account, no tracking, no analytics, no remote code, and nothing is sent to the developer. To sync, the extension passes the scroll position, the path of the page you navigate to and (if enabled) the element you hover or click from one pane to the other, only between the two sites you started sync for. Password, PIN and payment fields are never read or mirrored.
 
 Made by BijBijker – https://bijbijker.nl
 
@@ -52,9 +53,10 @@ Wat het doet
 • Pixel-exacte scroll-sync in beide richtingen, zonder vertraging
 • Elk Split View-paar blijft apart, ook met tien paren open
 • Blijft syncen na normaal of hard herladen van een kant
-• Navigatie synchroniseren: volg een link aan de ene kant en de andere kant opent hetzelfde pad op het eigen domein (live ↔ staging)
-• Klikken spiegelen: menu's, accordeons en modals aan beide kanten tegelijk openen
-• Hover-effecten spiegelen: CSS-hoverstijlen en hover-menu's aan beide kanten zien
+• Navigatie synchroniseren (standaard aan): volg een link aan de ene kant en de andere kant opent hetzelfde pad op het eigen domein (live ↔ staging)
+• Origin pinning: er wordt alleen gespiegeld tussen de twee sites waarvoor je op Sync starten klikte; opent een helft een andere site, dan pauzeert de sync tot je hem opnieuw start
+• Hover-effecten spiegelen (standaard aan): CSS-hoverstijlen en hover-menu's aan beide kanten zien
+• Klikken spiegelen (standaard uit): menu's, accordeons en modals aan beide kanten tegelijk openen. Verzendknoppen, formulieren die gegevens versturen en acties als verwijderen, betalen, bevestigen of uitloggen worden aan de andere kant nooit aangeklikt
 • Scroll-offset in pixels als de ene lay-out hoger is dan de andere
 • Gesynchroniseerde linialen om uitlijning te controleren
 • Verbergt desgewenst de WordPress-adminbalk zodat beide lay-outs gelijk lopen
@@ -67,15 +69,15 @@ Zo werkt het
 3. Open de extensie en klik op Sync starten, of gebruik de zwevende knop op de pagina.
 
 Privacy
-Geen account, geen tracking, geen analytics, geen externe code. Je instellingen blijven in je browser. Wachtwoord- en betaalvelden worden nooit gelezen of gespiegeld.
+Geen account, geen tracking, geen analytics, geen externe code, en er gaat niets naar de ontwikkelaar. Om te syncen geeft de extensie de scrollpositie, het pad van de pagina waar je naartoe navigeert en (als dat aan staat) het element waar je overheen beweegt of op klikt door van de ene helft naar de andere, alleen tussen de twee sites waarvoor je de sync startte. Wachtwoord-, pincode- en betaalvelden worden nooit gelezen of gespiegeld.
 
 Gemaakt door BijBijker – https://bijbijker.nl
 
 ## Single purpose (dashboard field)
 
-EN: Keep the two tabs of a Chrome Split View in sync (scroll position, and optionally clicks, hover and navigation) so two versions of a website can be compared side by side.
+EN: Keep the two tabs of a Chrome Split View in sync (scroll position, navigation and hover, and optionally clicks, only between the two sites the user started sync for) so two versions of a website can be compared side by side.
 
-NL: De twee tabbladen van een Chrome Split View gelijk houden (scrollpositie en optioneel klikken, hover en navigatie) zodat twee versies van een website naast elkaar vergeleken kunnen worden.
+NL: De twee tabbladen van een Chrome Split View gelijk houden (scrollpositie, navigatie en hover, en optioneel klikken, alleen tussen de twee sites waarvoor de gebruiker de sync startte) zodat twee versies van een website naast elkaar vergeleken kunnen worden.
 
 ## Permission justifications (dashboard fields)
 
@@ -90,9 +92,9 @@ Removed in 1.1.0 for least privilege: `tabs` (host permissions already give acce
 
 ## Data usage disclosures (privacy tab)
 
-- Does the extension collect user data? **No.** Tick none of the data categories.
+- Does the extension collect user data? **No** — nothing is sent to the developer or any server. Tick none of the data categories. (Decision point before submitting: the path/query of navigations and hover/click targets are handed from one user-chosen site to the other as the core function. If a reviewer treats that as "transfer", tick *Web history* and *User activity* and keep the certifications below; the privacy policy already describes it.)
 - Certify: does not sell or transfer user data to third parties; does not use or transfer data for purposes unrelated to the single purpose; does not use or transfer data to determine creditworthiness or for lending.
-- Note for reviewers: page addresses and element descriptions are only passed between the user's own two tabs inside the extension to perform the sync; nothing leaves the device and nothing is stored beyond the browser session.
+- Note for reviewers: to perform the sync, the scroll position, the path/query/hash of a navigation and (if enabled) a description of the hovered or clicked element are passed from one pane to the other. This only happens between the two origins the user pinned by pressing Start sync; if a pane opens another site, the pair pauses. Click mirroring is off by default and never activates submit buttons, POST forms or delete/pay/confirm/log-out actions. Nothing is sent to the developer and nothing is stored beyond the browser session.
 
 ## Assets
 

@@ -5,9 +5,13 @@ const SESSION_KEY = 'splitViewScrollSyncState';
 const LOCAL_SETTINGS_KEY = 'splitViewScrollSyncSettings';
 const SPLIT_NONE = chrome.tabs.SPLIT_VIEW_ID_NONE ?? -1;
 const DEFAULT_HIDE_WP_ADMIN_BAR = true;
+// Navigation and hover are only mirrored between the two origins the user
+// started sync for (origin pinning). Click mirroring can trigger actions on the
+// other site and is therefore opt-in.
 const DEFAULT_SYNC_NAVIGATION = true;
-const DEFAULT_MIRROR_CLICKS = true;
+const DEFAULT_MIRROR_CLICKS = false;
 const DEFAULT_MIRROR_HOVER = true;
+const PAUSE_ORIGIN_CHANGED = 'origin-changed';
 const DEFAULT_ALWAYS_SHOW_BUTTON = true;
 const SAVE_DEBOUNCE_MS = 150;
 const NAVIGATION_LOCK_MS = 1500;
@@ -84,6 +88,29 @@ const RULER_ID_PATTERN = /^r-[a-z0-9]{1,16}-[a-z0-9]{1,8}$/;
 
 // Popup options that may be changed for the current pair, mapped to the
 // group field that stores them.
+// On-page panel commands that start sync, widen what is mirrored or act on a
+// tab. The content script only sends them from a trusted (real user) event in
+// its closed shadow root and marks them with `userGesture: true`; anything
+// else is rejected.
+const GESTURE_REQUIRED_COMMANDS = new Set([
+  CMD.SYNC_CURRENT,
+  CMD.SYNC_ALL,
+  CMD.RELOAD_ACTIVE,
+  CMD.HARD_RELOAD_ACTIVE,
+  CMD.RELOAD_LEFT,
+  CMD.HARD_RELOAD_LEFT,
+  CMD.RELOAD_RIGHT,
+  CMD.HARD_RELOAD_RIGHT,
+  CMD.SWAP_SIDES,
+  CMD.SET_OFFSET,
+  CMD.OFFSET_RESET,
+  CMD.TOGGLE_WP_ADMIN_BAR,
+  CMD.SET_WP_ADMIN_BAR,
+  CMD.SET_NAVIGATION_SYNC,
+  CMD.SET_CLICK_MIRRORING,
+  CMD.SET_HOVER_MIRRORING
+]);
+
 const POPUP_GROUP_OPTIONS = Object.freeze({
   syncNavigation: 'syncNavigation',
   mirrorClicks: 'mirrorClicks',
@@ -284,20 +311,88 @@ function getOrigin(url) {
   }
 }
 
-function buildMirroredUrl(sourceUrl, targetUrl) {
-  if (!isNormalHttpUrl(sourceUrl) || !isNormalHttpUrl(targetUrl)) return null;
+// Maps the path, query and hash of `sourceUrl` onto `targetOrigin`, which must
+// be the pinned origin of the other pane. Never produces a URL on any other
+// origin.
+function buildMirroredUrl(sourceUrl, targetOrigin) {
+  if (!isNormalHttpUrl(sourceUrl) || typeof targetOrigin !== 'string' || !targetOrigin) return null;
 
   try {
     const source = new URL(sourceUrl);
-    const target = new URL(targetUrl);
-
-    if (!/^https?:$/.test(source.protocol) || !/^https?:$/.test(target.protocol)) return null;
-    if (source.origin === target.origin) return source.href;
-
-    return `${target.origin}${source.pathname}${source.search}${source.hash}`;
+    if (!/^https?:$/.test(source.protocol)) return null;
+    // Set the parts individually so a path such as `//other.example` can never
+    // change the host.
+    const mirrored = new URL(targetOrigin);
+    mirrored.pathname = source.pathname;
+    mirrored.search = source.search;
+    mirrored.hash = source.hash;
+    if (!/^https?:$/.test(mirrored.protocol) || mirrored.origin !== targetOrigin) return null;
+    return mirrored.href;
   } catch (_error) {
     return null;
   }
+}
+
+// ---- Origin pinning --------------------------------------------------------
+// When the user starts sync, the origin of each pane is recorded on the pair.
+// Clicks, focus, hover and navigation are only mirrored while both panes are
+// still on their pinned origin. If either pane leaves it, the pair is paused
+// until the user presses Start again (which pins the new origins).
+
+function pinnedOriginFor(group, tabId) {
+  if (!group) return null;
+  if (tabId === group.leftTabId) return group.pinnedLeftOrigin || null;
+  if (tabId === group.rightTabId) return group.pinnedRightOrigin || null;
+  return null;
+}
+
+async function pinPairOrigins(group) {
+  const [leftTab, rightTab] = await Promise.all([safeGetTab(group.leftTabId), safeGetTab(group.rightTabId)]);
+  group.pinnedLeftOrigin = getOrigin(leftTab?.url);
+  group.pinnedRightOrigin = getOrigin(rightTab?.url);
+  group.originsPinned = true;
+  group.pauseReason = null;
+}
+
+async function pauseForOriginChange(group) {
+  if (!group || !group.enabled) return;
+  debug('Pausing pair: a pane left its pinned origin', group.groupKey);
+  group.enabled = false;
+  group.pauseReason = PAUSE_ORIGIN_CHANGED;
+  group.isReloadingTabs = {};
+  group.navigationLocks = {};
+  group.error = null;
+  await saveStateNow();
+  await sendGroupState(group);
+}
+
+// Pairs enabled before origin pinning existed have no pins yet; pin them to
+// their current origins once instead of pausing them with a misleading reason.
+async function ensurePinsForEnabledGroup(group) {
+  if (!group?.enabled || group.originsPinned) return;
+  await pinPairOrigins(group);
+  scheduleSaveState();
+}
+
+// True when the source pane (reported URL, or its current tab URL) and the
+// peer pane are both on their pinned origins. Pauses the pair otherwise.
+async function isPairOnPinnedOrigins(group, sourceTabId, sourceUrl = null) {
+  if (!group?.enabled) return false;
+  await ensurePinsForEnabledGroup(group);
+
+  const targetTabId = getPeerTabId(group, sourceTabId);
+  const sourcePin = pinnedOriginFor(group, sourceTabId);
+  const targetPin = pinnedOriginFor(group, targetTabId);
+  if (!targetTabId || !sourcePin || !targetPin) return false;
+
+  const sourceOrigin = getOrigin(sourceUrl) || getOrigin((await safeGetTab(sourceTabId))?.url);
+  const targetOrigin = getOrigin((await safeGetTab(targetTabId))?.url);
+
+  if (sourceOrigin !== sourcePin || targetOrigin !== targetPin) {
+    await pauseForOriginChange(group);
+    return false;
+  }
+  return true;
 }
 
 function sameUrl(a, b) {
@@ -415,6 +510,9 @@ function buildUiStateForTab(group, tabId, show = true) {
   if (group.error) {
     color = 'red';
     statusText = group.error;
+  } else if (!enabled && group.pauseReason === PAUSE_ORIGIN_CHANGED) {
+    color = 'orange';
+    statusText = 'Paused: a different site was opened';
   } else if (enabled && (reloading || hasOffset)) {
     color = 'orange';
     statusText = reloading ? 'Sync active, pane reloading' : 'Sync active with offset';
@@ -441,7 +539,8 @@ function buildUiStateForTab(group, tabId, show = true) {
     rulers: Array.isArray(group.rulers) ? group.rulers : [],
     color,
     statusText,
-    reloading
+    reloading,
+    pauseReason: enabled ? null : (group.pauseReason || null)
   };
 }
 
@@ -496,6 +595,10 @@ function getDefaultsFromExistingGroup(existing, defaults) {
     clickLocks: {},
     leftOrigin: null,
     rightOrigin: null,
+    pinnedLeftOrigin: null,
+    pinnedRightOrigin: null,
+    originsPinned: false,
+    pauseReason: null,
     rulers: [],
     ...(existing || {})
   };
@@ -573,6 +676,11 @@ async function scanWindow(windowId = null) {
       clickLocks: existing.clickLocks || {},
       leftOrigin: getOrigin(leftTab?.url) || existing.leftOrigin || null,
       rightOrigin: getOrigin(rightTab?.url) || existing.rightOrigin || null,
+      // Pins belong to this exact pair of tabs; a different pair starts unpinned.
+      pinnedLeftOrigin: samePair ? (existing.pinnedLeftOrigin || null) : null,
+      pinnedRightOrigin: samePair ? (existing.pinnedRightOrigin || null) : null,
+      originsPinned: samePair ? Boolean(existing.originsPinned) : false,
+      pauseReason: samePair ? (existing.pauseReason || null) : null,
       rulers: Array.isArray(existing.rulers) ? existing.rulers : [],
       error: null,
       updatedAt: Date.now()
@@ -715,8 +823,10 @@ async function enableCurrentSplitView(tabId, windowId) {
     return;
   }
 
+  await pinPairOrigins(group);
   group.enabled = true;
   group.error = null;
+  group.navigationLocks = {};
   group.hideWpAdminBar = typeof group.hideWpAdminBar === 'boolean' ? group.hideWpAdminBar : DEFAULT_HIDE_WP_ADMIN_BAR;
 
   await saveStateNow();
@@ -741,8 +851,10 @@ async function enableAllSplitViewsInCurrentWindow() {
 
   for (const group of Object.values(state.groups)) {
     if (activeWindowId != null && group.windowId !== activeWindowId) continue;
+    await pinPairOrigins(group);
     group.enabled = true;
     group.error = null;
+    group.navigationLocks = {};
     group.hideWpAdminBar = typeof group.hideWpAdminBar === 'boolean' ? group.hideWpAdminBar : DEFAULT_HIDE_WP_ADMIN_BAR;
   }
 
@@ -764,6 +876,7 @@ async function stopCurrentSplitView(tabId, windowId) {
   if (!group) return;
 
   group.enabled = false;
+  group.pauseReason = null;
   group.error = null;
   group.isReloadingTabs = {};
   await saveStateNow();
@@ -775,6 +888,7 @@ async function stopAllSplitViews() {
 
   for (const group of Object.values(state.groups)) {
     group.enabled = false;
+    group.pauseReason = null;
     group.error = null;
     group.isReloadingTabs = {};
   }
@@ -822,6 +936,10 @@ async function swapSides(tabId, windowId) {
   const oldLeftOrigin = group.leftOrigin;
   group.leftOrigin = group.rightOrigin;
   group.rightOrigin = oldLeftOrigin;
+
+  const oldPinnedLeft = group.pinnedLeftOrigin;
+  group.pinnedLeftOrigin = group.pinnedRightOrigin;
+  group.pinnedRightOrigin = oldPinnedLeft;
 
   group.offsetX = -Number(group.offsetX || 0);
   group.offsetY = -Number(group.offsetY || 0);
@@ -898,6 +1016,14 @@ async function handleScrollMessage(sender, message) {
   const group = await getGroupForTab(tabId, windowId);
   if (!group || !group.enabled) return;
 
+  // Cheap per-scroll check on the sender only; the peer is checked on every
+  // navigation (tabs.onUpdated).
+  await ensurePinsForEnabledGroup(group);
+  if (getOrigin(sender.url || sender.tab?.url) !== pinnedOriginFor(group, tabId)) {
+    await pauseForOriginChange(group);
+    return;
+  }
+
   group.lastKnownScrollX = Math.max(0, finiteOr(message.scrollX));
   group.lastKnownScrollY = Math.max(0, finiteOr(message.scrollY));
   group.lastSourceTabId = tabId;
@@ -912,17 +1038,30 @@ async function handleScrollMessage(sender, message) {
 }
 
 async function handleNavigationFromTab(tabId, windowId, sourceUrl) {
-  if (!isNormalHttpUrl(sourceUrl)) return;
-
   await scanWindow(windowId);
   const group = await getGroupForTab(tabId, windowId);
   if (!group) return;
 
+  const sourceOrigin = getOrigin(sourceUrl);
   const side = getSide(group, tabId);
-  if (side === 'left') group.leftOrigin = getOrigin(sourceUrl) || group.leftOrigin;
-  if (side === 'right') group.rightOrigin = getOrigin(sourceUrl) || group.rightOrigin;
+  if (side === 'left') group.leftOrigin = sourceOrigin || group.leftOrigin;
+  if (side === 'right') group.rightOrigin = sourceOrigin || group.rightOrigin;
 
-  if (!group.enabled || !group.syncNavigation) {
+  if (!group.enabled) {
+    scheduleSaveState();
+    await sendGroupState(group, tabId);
+    return;
+  }
+
+  // Leaving the pinned origin (another site, or a non-http page) pauses the
+  // pair; nothing is mirrored to or from an origin outside the pinned pair.
+  await ensurePinsForEnabledGroup(group);
+  if (!sourceOrigin || sourceOrigin !== pinnedOriginFor(group, tabId)) {
+    await pauseForOriginChange(group);
+    return;
+  }
+
+  if (!group.syncNavigation) {
     scheduleSaveState();
     await sendGroupState(group, tabId);
     return;
@@ -940,10 +1079,15 @@ async function handleNavigationFromTab(tabId, windowId, sourceUrl) {
   const targetTabId = getPeerTabId(group, tabId);
   if (!targetTabId) return;
 
+  const targetPin = pinnedOriginFor(group, targetTabId);
   const targetTab = await safeGetTab(targetTabId);
-  if (!targetTab || !isNormalHttpUrl(targetTab.url)) return;
+  if (!targetTab || !targetPin) return;
+  if (getOrigin(targetTab.url) !== targetPin) {
+    await pauseForOriginChange(group);
+    return;
+  }
 
-  const targetUrl = buildMirroredUrl(sourceUrl, targetTab.url);
+  const targetUrl = buildMirroredUrl(sourceUrl, targetPin);
   if (!targetUrl || sameUrl(targetUrl, targetTab.url)) return;
 
   group.navigationLocks = group.navigationLocks || {};
@@ -969,6 +1113,7 @@ async function handleClickMessage(sender, message) {
 
   const group = await getGroupForTab(tabId, windowId);
   if (!group || !group.enabled || !group.mirrorClicks) return;
+  if (!(await isPairOnPinnedOrigins(group, tabId, sender.url))) return;
 
   const targetTabId = getPeerTabId(group, tabId);
   if (!targetTabId) return;
@@ -978,6 +1123,7 @@ async function handleClickMessage(sender, message) {
 
   await safeSendMessage(targetTabId, {
     type: MSG.REMOTE_CLICK,
+    targetOrigin: pinnedOriginFor(group, targetTabId),
     sourceTabId: tabId,
     groupKey: group.groupKey,
     click: plainObjectOr(message.click),
@@ -992,6 +1138,7 @@ async function handleFocusMessage(sender, message) {
 
   const group = await getGroupForTab(tabId, windowId);
   if (!group || !group.enabled || !group.mirrorClicks) return;
+  if (!(await isPairOnPinnedOrigins(group, tabId, sender.url))) return;
 
   const targetTabId = getPeerTabId(group, tabId);
   if (!targetTabId) return;
@@ -1001,6 +1148,7 @@ async function handleFocusMessage(sender, message) {
 
   await safeSendMessage(targetTabId, {
     type: MSG.REMOTE_FOCUS,
+    targetOrigin: pinnedOriginFor(group, targetTabId),
     focus: plainObjectOr(message.focus)
   });
 }
@@ -1012,6 +1160,7 @@ async function handleHoverMessage(sender, message) {
 
   const group = await getGroupForTab(tabId, windowId);
   if (!group || !group.enabled || !group.mirrorHover) return;
+  if (!(await isPairOnPinnedOrigins(group, tabId, sender.url))) return;
 
   const targetTabId = getPeerTabId(group, tabId);
   if (!targetTabId) return;
@@ -1021,6 +1170,7 @@ async function handleHoverMessage(sender, message) {
 
   await safeSendMessage(targetTabId, {
     type: MSG.REMOTE_HOVER,
+    targetOrigin: pinnedOriginFor(group, targetTabId),
     sourceTabId: tabId,
     groupKey: group.groupKey,
     hover: plainObjectOr(message.hover),
@@ -1109,6 +1259,14 @@ async function handleReadyMessage(sender, message) {
     if (side === 'right') group.rightOrigin = getOrigin(message.url) || group.rightOrigin;
   }
 
+  if (group.enabled) {
+    await ensurePinsForEnabledGroup(group);
+    if (getOrigin(sender.url || message.url) !== pinnedOriginFor(group, tabId)) {
+      await pauseForOriginChange(group);
+      return;
+    }
+  }
+
   await saveStateNow();
   await sendGroupState(group, tabId);
 
@@ -1122,6 +1280,11 @@ async function handleUiCommand(sender, command, message = {}) {
   const tabId = sender.tab?.id;
   const windowId = sender.tab?.windowId;
   if (typeof tabId !== 'number' || typeof windowId !== 'number') return;
+
+  if (GESTURE_REQUIRED_COMMANDS.has(command) && message.userGesture !== true) {
+    debug('Rejected UI command without user gesture', command);
+    return;
+  }
 
   switch (command) {
     case CMD.SYNC_CURRENT:
@@ -1193,6 +1356,7 @@ function summarizeGroupForPopup(group) {
   const reloading = Boolean(group.isReloadingTabs && Object.keys(group.isReloadingTabs).length);
   return {
     enabled: Boolean(group.enabled),
+    pauseReason: group.enabled ? null : (group.pauseReason || null),
     error: Boolean(group.error),
     reloading,
     offsetY: Number(group.offsetY || 0),
@@ -1490,6 +1654,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     if (message.type === MSG.POPUP_RULER_ADD) {
+      if (fromPage && message.userGesture !== true) {
+        sendResponse({ ok: false });
+        return;
+      }
       await handlePopupRulerAdd(fromPage ? sender : null);
       sendResponse({ ok: true });
       return;
@@ -1571,7 +1739,9 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
       await refreshWindowUi(tab.windowId);
     }
 
-    if (changeInfo.url && isNormalHttpUrl(changeInfo.url)) {
+    // Every URL change is checked against the pinned origins, also changes to
+    // non-http pages (those pause an enabled pair).
+    if (changeInfo.url) {
       await handleNavigationFromTab(tabId, tab.windowId, changeInfo.url);
     }
 

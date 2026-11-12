@@ -159,7 +159,8 @@ ol {
   background: var(--tint-synced);
 }
 
-.popup[data-state="error"] .status {
+.popup[data-state="error"] .status,
+.popup[data-state="origin-paused"] .status {
   border-color: var(--tint-warn-line);
   background: var(--tint-warn);
 }
@@ -180,7 +181,8 @@ ol {
   line-height: 1.3;
 }
 
-.popup[data-state="error"] .status-title {
+.popup[data-state="error"] .status-title,
+.popup[data-state="origin-paused"] .status-title {
   color: var(--warn-ink);
 }
 
@@ -249,7 +251,8 @@ ol {
   fill: var(--tint-synced-line);
 }
 
-.popup[data-state="error"] .pair-node {
+.popup[data-state="error"] .pair-node,
+.popup[data-state="origin-paused"] .pair-node {
   fill: var(--tint-warn);
   stroke: var(--warn-ink);
 }

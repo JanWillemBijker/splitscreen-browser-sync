@@ -90,13 +90,13 @@
     "message": "Navigatie synchroniseren"
   },
   "optNavigationHelp": {
-    "message": "Opent hetzelfde pad aan de andere kant, op het eigen domein."
+    "message": "Opent hetzelfde pad aan de andere kant, alleen tussen de twee gekoppelde sites."
   },
   "optClicks": {
     "message": "Klikken spiegelen"
   },
   "optClicksHelp": {
-    "message": "Herhaalt klikken op het overeenkomende element. Nooit op wachtwoord- of betaalvelden."
+    "message": "Herhaalt klikken op het overeenkomende element. Nooit op formulieren, betalen of verwijderen."
   },
   "optHover": {
     "message": "Hover-effecten spiegelen"
@@ -223,5 +223,17 @@
   },
   "panelTitle": {
     "message": "SplitScreen Sync"
+  },
+  "statusOriginPausedTitle": {
+    "message": "Gepauzeerd: andere site geopend"
+  },
+  "statusOriginPausedBody": {
+    "message": "Een helft heeft de site verlaten waarvoor je de sync startte. Klik op Sync starten om deze twee sites te koppelen."
+  },
+  "pillOriginPaused": {
+    "message": "Gepauzeerd: andere site"
+  },
+  "toastClickSkipped": {
+    "message": "Klik niet gespiegeld (formulier/actie)"
   }
 }

@@ -29,7 +29,7 @@ const groupOptionInputs = Array.from(document.querySelectorAll('[data-group-opti
 const defaultToggles = [
   { el: $('defaultHideWpAdminBar'), key: 'defaultHideWpAdminBar', fallbackOn: true },
   { el: $('defaultSyncNavigation'), key: 'defaultSyncNavigation', fallbackOn: true },
-  { el: $('defaultMirrorClicks'), key: 'defaultMirrorClicks', fallbackOn: true },
+  { el: $('defaultMirrorClicks'), key: 'defaultMirrorClicks', fallbackOn: false },
   { el: $('defaultMirrorHover'), key: 'defaultMirrorHover', fallbackOn: true }
 ];
 
@@ -66,19 +66,21 @@ function formatSigned(value) {
   return n > 0 ? `+${n}` : String(n);
 }
 
-// One of: synced, paused, reloading, error, no-split, unsupported.
+// One of: synced, paused, origin-paused, reloading, error, no-split, unsupported.
 function resolveState(status) {
   if (!status) return 'no-split';
   if (!status.isInValidSplitView) return status.reason === 'unsupported-page' ? 'unsupported' : 'no-split';
   const group = status.group || {};
   if (group.error) return 'error';
   if (group.enabled && group.reloading) return 'reloading';
+  if (!group.enabled && group.pauseReason === 'origin-changed') return 'origin-paused';
   return group.enabled ? 'synced' : 'paused';
 }
 
 const STATE_COPY = {
   synced: ['statusSyncedTitle', 'statusSyncedBody'],
   paused: ['statusPausedTitle', 'statusPausedBody'],
+  'origin-paused': ['statusOriginPausedTitle', 'statusOriginPausedBody'],
   reloading: ['statusReloadingTitle', 'statusReloadingBody'],
   error: ['statusErrorTitle', 'statusErrorBody'],
   'no-split': ['statusNoSplitTitle', 'statusNoSplitBody'],

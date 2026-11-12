@@ -57,6 +57,9 @@
   });
 
   const HOST_ID = 'svss-root';
+  const RULER_HOST_ID = 'svss-ruler-root';
+  // Legacy light-DOM ruler nodes (before 1.1.0 hardening); removed if present.
+  const LEGACY_RULER_IDS = ['svss-ruler-layer', 'svss-ruler-popup'];
   const WP_STYLE_ID = 'splitview-scroll-sync-wp-adminbar-hide';
   const FORCE_HOVER_STYLE_ID = 'splitview-scroll-sync-force-hover';
   const FORCE_HOVER_CLASS = 'svss-force-hover';
@@ -237,11 +240,25 @@
       font-size: 12px;
       font-weight: 600;
       white-space: nowrap;
+      max-width: 160px;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .svss-panel[data-status="synced"] .svss-pill,
     .svss-panel[data-status="reloading"] .svss-pill { background: var(--ok-bg); color: var(--ok-ink); }
-    .svss-panel[data-status="error"] .svss-pill { background: var(--warn-bg); color: var(--warn-ink); }
+    .svss-panel[data-status="error"] .svss-pill,
+    .svss-panel[data-status="origin"] .svss-pill { background: var(--warn-bg); color: var(--warn-ink); }
+
+    .svss-notice {
+      margin: 0 0 8px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      background: var(--warn-bg);
+      color: var(--warn-ink);
+      font-size: 12px;
+      line-height: 1.4;
+    }
 
     .svss-close {
       appearance: none;
@@ -493,6 +510,8 @@
   let rulers = [];
   let selectedRulerId = null;
   let peerSelectedRulerId = null;
+  let rulerHost = null;
+  let rulerShadow = null;
   let rulerLayer = null;
   let rulerPopup = null;
   let isDraggingRuler = false;
@@ -627,6 +646,35 @@
     bridge = null;
   }
 
+  // Every control of the panel and the rulers lives in a closed shadow root,
+  // but a page could still try to drive it with synthetic events or hide our
+  // host and lure the user into clicking it. Only real user input on a host
+  // that is ours, attached where we put it and visibly rendered, counts.
+  function isHostGenuine(node) {
+    if (!node || !node.isConnected || node.parentNode !== document.documentElement) return false;
+    try {
+      const style = getComputedStyle(node);
+      return style.display !== 'none'
+        && style.visibility === 'visible'
+        && style.opacity === '1'
+        && style.filter === 'none'
+        && style.transform === 'none';
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  function isTrustedUiEvent(event, uiHost = host) {
+    return Boolean(event && event.isTrusted) && isHostGenuine(uiHost);
+  }
+
+  // Panel commands are only sent from a trusted event; the service worker
+  // rejects the security-relevant ones without `userGesture`.
+  function sendUiCommand(event, command, payload = {}) {
+    if (!isTrustedUiEvent(event)) return null;
+    return sendRuntimeMessage({ ...payload, type: MSG.COMMAND, command, userGesture: true });
+  }
+
   function createButton(label, command, extraClass = '', payloadFactory = null, options = {}) {
     const button = document.createElement('button');
     button.type = 'button';
@@ -637,8 +685,9 @@
     button.addEventListener('click', async (event) => {
       event.preventDefault();
       event.stopPropagation();
+      if (!event.isTrusted) return;
       const payload = typeof payloadFactory === 'function' ? payloadFactory() : {};
-      await sendRuntimeMessage({ type: MSG.COMMAND, command, ...payload });
+      await sendUiCommand(event, command, payload);
     });
     return button;
   }
@@ -677,7 +726,11 @@
     input.dataset.key = command;
     input.addEventListener('change', async (event) => {
       event.stopPropagation();
-      await sendRuntimeMessage({ type: MSG.COMMAND, command, value: input.checked });
+      if (!isTrustedUiEvent(event)) {
+        input.checked = !input.checked; // undo; the state did not change
+        return;
+      }
+      await sendUiCommand(event, command, { value: input.checked });
     });
 
     toggle.appendChild(text);
@@ -688,11 +741,18 @@
   // Maps the background state to one of: synced, paused, reloading, error.
   function getPanelStatus() {
     if (uiState.color === 'red') return 'error';
+    if (!uiState.enabled && uiState.pauseReason === 'origin-changed') return 'origin';
     if (uiState.enabled && uiState.reloading) return 'reloading';
     return uiState.enabled ? 'synced' : 'paused';
   }
 
-  const PILL_KEYS = { synced: 'pillSynced', paused: 'pillPaused', reloading: 'pillReloading', error: 'pillError' };
+  const PILL_KEYS = {
+    synced: 'pillSynced',
+    paused: 'pillPaused',
+    origin: 'pillOriginPaused',
+    reloading: 'pillReloading',
+    error: 'pillError'
+  };
 
   function renderPanelContents() {
     if (!panel) return;
@@ -726,6 +786,7 @@
     close.addEventListener('click', (event) => {
       event.preventDefault();
       event.stopPropagation();
+      if (!event.isTrusted) return;
       closePanelAndFocusBubble();
     });
 
@@ -733,6 +794,13 @@
     header.appendChild(pill);
     header.appendChild(close);
     panel.appendChild(header);
+
+    if (status === 'origin') {
+      const notice = document.createElement('p');
+      notice.className = 'svss-notice';
+      notice.textContent = t('statusOriginPausedBody', 'One pane left the site you started sync for. Press Start sync to sync these two sites.');
+      panel.appendChild(notice);
+    }
 
     const syncRow = document.createElement('div');
     syncRow.className = 'svss-sync';
@@ -770,7 +838,7 @@
       event.stopPropagation();
       if (event.key === 'Enter') {
         event.preventDefault();
-        sendRuntimeMessage({ type: MSG.COMMAND, command: CMD.SET_OFFSET, offsetY: parseInt(yInput.value || '0', 10) || 0 });
+        sendUiCommand(event, CMD.SET_OFFSET, { offsetY: parseInt(yInput.value || '0', 10) || 0 });
       }
     });
 
@@ -824,7 +892,8 @@
     addRulerPanelBtn.addEventListener('click', async (event) => {
       event.preventDefault();
       event.stopPropagation();
-      await sendRuntimeMessage({ type: MSG.POPUP_RULER_ADD });
+      if (!isTrustedUiEvent(event)) return;
+      await sendRuntimeMessage({ type: MSG.POPUP_RULER_ADD, userGesture: true });
     });
     footer.appendChild(addRulerPanelBtn);
     panel.appendChild(footer);
@@ -874,18 +943,50 @@
     if (bubble) bubble.focus({ preventScroll: true });
   }
 
-  function ensureUi() {
-    if (host && shadow) return;
+  // Removes every element with one of our ids that we did not create (a page
+  // could pre-create them to own the shadow root or mimic our UI).
+  function removeForeignNodes(ids, keep) {
+    for (const id of ids) {
+      for (const node of Array.from(document.querySelectorAll(`[id="${id}"]`))) {
+        if (node !== keep) node.remove();
+      }
+    }
+  }
 
-    host = document.getElementById(HOST_ID);
-    if (!host) {
-      host = document.createElement('div');
-      host.id = HOST_ID;
-      (document.documentElement || document.body).appendChild(host);
+  // Inline !important beats page stylesheets, so the host cannot be made
+  // invisible with CSS to trick the user into clicking it.
+  function hardenHostStyle(node) {
+    const declarations = {
+      display: 'block',
+      visibility: 'visible',
+      opacity: '1',
+      filter: 'none',
+      transform: 'none',
+      'clip-path': 'none',
+      mask: 'none',
+      position: 'fixed',
+      'z-index': '2147483647'
+    };
+    for (const [property, value] of Object.entries(declarations)) node.style.setProperty(property, value, 'important');
+  }
+
+  function ensureUi() {
+    if (host && shadow && host.isConnected && host.parentNode === document.documentElement) {
+      removeForeignNodes([HOST_ID], host);
+      return;
     }
 
-    shadow = host.shadowRoot || host.attachShadow({ mode: 'open' });
-    shadow.textContent = '';
+    // Never reuse an existing node: always a fresh host with a closed shadow
+    // root whose reference only lives in this closure.
+    if (host) hideFloatingUi();
+    removeForeignNodes([HOST_ID], null);
+    if (!document.documentElement) return;
+
+    host = document.createElement('div');
+    host.id = HOST_ID;
+    hardenHostStyle(host);
+    document.documentElement.appendChild(host);
+    shadow = host.attachShadow({ mode: 'closed' });
 
     const style = document.createElement('style');
     style.textContent = PANEL_CSS;
@@ -918,6 +1019,7 @@
     bubble.addEventListener('click', (event) => {
       event.preventDefault();
       event.stopPropagation();
+      if (!isTrustedUiEvent(event)) return;
       clearCloseTimer();
       panelOpen = !panelOpen;
       updatePanelOpenState();
@@ -929,6 +1031,7 @@
     });
 
     wrap.addEventListener('keydown', (event) => {
+      if (!event.isTrusted) return;
       if (event.key === 'Escape' && panelOpen) {
         event.preventDefault();
         event.stopPropagation();
@@ -936,22 +1039,26 @@
       }
     });
 
-    bubble.addEventListener('pointerenter', () => {
+    bubble.addEventListener('pointerenter', (event) => {
+      if (!isTrustedUiEvent(event)) return;
       isPointerOverBubble = true;
       openPanel();
     });
 
-    bubble.addEventListener('pointerleave', () => {
+    bubble.addEventListener('pointerleave', (event) => {
+      if (!event.isTrusted) return;
       isPointerOverBubble = false;
       schedulePanelClose();
     });
 
     for (const area of [panel, bridge]) {
-      area.addEventListener('pointerenter', () => {
+      area.addEventListener('pointerenter', (event) => {
+        if (!isTrustedUiEvent(event)) return;
         isPointerOverPanel = true;
         openPanel();
       });
-      area.addEventListener('pointerleave', () => {
+      area.addEventListener('pointerleave', (event) => {
+        if (!event.isTrusted) return;
         isPointerOverPanel = false;
         schedulePanelClose();
       });
@@ -974,7 +1081,8 @@
     }
 
     ensureUi();
-    host.style.display = 'block';
+    if (!host) return;
+    hardenHostStyle(host);
     host.style.setProperty('--status-color', getStatusColor(uiState.color));
     bubble.title = `${t('extName', 'SplitScreen Browser Sync')}: ${t(PILL_KEYS[getPanelStatus()], '')}`;
     renderPanelContents();
@@ -1117,6 +1225,7 @@
   }
 
   function handleLocalScroll() {
+    if (!uiState.enabled) return;          // nothing leaves the page unless this pair is syncing
     const now = performance.now();
     if (isApplyingRemoteScroll || now < suppressScrollUntil) return;
     if (scrollRafPending) return;
@@ -1124,6 +1233,7 @@
     scrollRafPending = true;
     requestAnimationFrame(async () => {
       scrollRafPending = false;
+      if (!uiState.enabled) return;
       if (isApplyingRemoteScroll || performance.now() < suppressScrollUntil) return;
 
       const { scrollX, scrollY } = readScrollPosition();
@@ -1182,27 +1292,16 @@
       const href = location.href;
       if (href === lastReportedUrl) return;
       lastReportedUrl = href;
+      if (!uiState.enabled) return;
       if (!/^https?:\/\//i.test(href)) return;
       await sendRuntimeMessage({ type: MSG.NAVIGATED, url: href, timestamp: Date.now() });
     });
   }
 
-  function patchHistoryMethod(methodName) {
-    const original = history[methodName];
-    if (typeof original !== 'function' || original.__svssPatched) return;
-
-    const patched = function patchedHistoryMethod(...args) {
-      const result = original.apply(this, args);
-      reportNavigationIfChanged();
-      return result;
-    };
-    patched.__svssPatched = true;
-    history[methodName] = patched;
-  }
-
+  // pushState/replaceState from the page are seen by the service worker via
+  // tabs.onUpdated (the content script runs in an isolated world, so patching
+  // `history` here would never see the page's calls).
   function setupNavigationWatcher() {
-    patchHistoryMethod('pushState');
-    patchHistoryMethod('replaceState');
     window.addEventListener('popstate', reportNavigationIfChanged, true);
     window.addEventListener('hashchange', reportNavigationIfChanged, true);
   }
@@ -1557,16 +1656,101 @@
     } catch (_error) {}
   }
 
+  // Clicks that could submit data or trigger an irreversible action on the
+  // other site are never replayed there: submit buttons, anything inside a
+  // POST form (text fields still get focus) and elements whose label or link
+  // reads like delete / pay / confirm / buy / order / log out.
+  const RISKY_ACTION_WORDS = /(^|[^a-z\u00c0-\u024f])(delete|verwijder\w*|remove|pay|payment|betaa?l\w*|confirm|bevestig\w*|buy|koop|kopen|order|bestel\w*|checkout|afrekenen|log[\s_-]?out|logoff|sign[\s_-]?out|uitlog\w*|afmelden)([^a-z\u00c0-\u024f]|$)/i;
+
+  function isTextLikeInput(element) {
+    if (!(element instanceof Element)) return false;
+    const tag = element.tagName.toLowerCase();
+    if (tag === 'textarea' || element.isContentEditable) return true;
+    if (tag !== 'input') return false;
+    const type = (element.getAttribute('type') || 'text').toLowerCase();
+    return !['button', 'submit', 'reset', 'image', 'checkbox', 'radio', 'file', 'color', 'range'].includes(type);
+  }
+
+  function isSubmitControl(element) {
+    if (!(element instanceof Element)) return false;
+    const tag = element.tagName.toLowerCase();
+    const type = (element.getAttribute('type') || '').toLowerCase();
+    // A <button> without type submits only when it belongs to a form.
+    if (tag === 'button') return (type === '' || type === 'submit') && Boolean(ownerForm(element));
+    if (tag === 'input') return type === 'submit' || type === 'image';
+    return false;
+  }
+
+  function ownerForm(element) {
+    if (!(element instanceof Element)) return null;
+    if (element.form instanceof HTMLFormElement) return element.form;
+    return element.closest('form');
+  }
+
+  function actionTextOf(element) {
+    if (!(element instanceof Element)) return '';
+    const parts = [
+      element.getAttribute('aria-label'),
+      element.getAttribute('title')
+    ];
+    // Only short captions count; a large container (e.g. a modal backdrop) is
+    // judged by its own attributes, not by every word inside it.
+    const caption = isFormInput(element) ? '' : normalizeText(element.innerText || element.textContent || '');
+    if (caption.length <= 120) parts.push(caption);
+    const tag = element.tagName.toLowerCase();
+    const type = (element.getAttribute('type') || '').toLowerCase();
+    // The visible caption of an input button is its value; never read other values.
+    if (tag === 'input' && ['button', 'submit', 'reset'].includes(type)) parts.push(element.getAttribute('value'));
+    if (tag === 'a') {
+      const href = element.getAttribute('href') || '';
+      try {
+        const url = new URL(href, location.href);
+        parts.push(decodeURIComponent(`${url.pathname} ${url.search} ${url.hash}`).replace(/[/?&=._-]+/g, ' '));
+      } catch (_error) {
+        parts.push(href);
+      }
+    }
+    return parts.filter(Boolean).join(' ');
+  }
+
+  function isRiskyClickTarget(pointElement, activatable) {
+    for (const element of [activatable, pointElement]) {
+      if (!(element instanceof Element)) continue;
+      if (isSubmitControl(element)) return true;
+      const form = ownerForm(element);
+      if (form && String(form.getAttribute('method') || '').toLowerCase() === 'post' && !isTextLikeInput(element)) return true;
+      if (RISKY_ACTION_WORDS.test(actionTextOf(element))) return true;
+    }
+    return false;
+  }
+
+  let lastSkipToastAt = 0;
+
+  function notifyClickSkipped() {
+    const now = Date.now();
+    if (now - lastSkipToastAt < 3000) return;
+    lastSkipToastAt = now;
+    showToast(t('toastClickSkipped', 'Click not mirrored (form/action)'));
+  }
+
+  function isForThisOrigin(message) {
+    return typeof message?.targetOrigin === 'string' && message.targetOrigin === location.origin;
+  }
+
   // Replay a realistic pointer/mouse sequence, then trigger exactly one real
-  // activation. The native .click() handles default actions (links, submit,
-  // checkbox toggles) and only fires `click` once, so toggles never double-fire.
+  // activation. The native .click() handles default actions (links, checkbox
+  // toggles) and only fires `click` once, so toggles never double-fire.
   function applyRemoteClick(payload) {
-    if (!uiState.mirrorClicks) return;
+    if (!uiState.enabled || !uiState.mirrorClicks) return;
 
     const pointElement = resolveClickTarget(payload);
     if (!pointElement || isSensitiveField(pointElement)) return;
 
     const activatable = getInteractiveElement(pointElement);
+    if (isRiskyClickTarget(pointElement, activatable)) {
+      notifyClickSkipped();
+      return;
+    }
     const rect = pointElement.getBoundingClientRect();
     const x = rect.left + rect.width / 2;
     const y = rect.top + rect.height / 2;
@@ -1623,7 +1807,7 @@
   }
 
   function handleLocalClick(event) {
-    if (!uiState.mirrorClicks) return;
+    if (!uiState.enabled || !uiState.mirrorClicks) return;
     if (!event.isTrusted) return;            // synthetic / mirrored clicks are never trusted -> no echo loop
     if (event.button !== undefined && event.button !== 0) return; // primary button only
     if (isApplyingRemoteClick || performance.now() < remoteClickSuppressUntil) return;
@@ -1646,17 +1830,23 @@
   // one-time codes and payment card data. Their value is never read, and
   // clicks/focus on them are not mirrored.
   const SENSITIVE_AUTOCOMPLETE = /(^|\s)(current-password|new-password|one-time-code|cc-[a-z-]+)(\s|$)/i;
-  const SENSITIVE_NAME = /(pass(word|wd)?|pwd|secret|token|otp|cvc|cvv|card.?num|cc.?(num|exp|csc)|iban|security.?code)/i;
+  // Matched anywhere in the hint text.
+  const SENSITIVE_NAME = /(pass(word|wd)?|pwd|secret|token|otp|cvc|cvv|card.?num|cc.?(num|exp|csc)|iban|security.?code|pincode|passcode|verification|2fa|mfa|totp)/i;
+  // Short words matched as a whole token only (so "shipping" is not a PIN).
+  const SENSITIVE_TOKEN = /(^|[^a-z0-9])(pin|ssn|bsn|sofi|code|auth|tan)([^a-z0-9]|$)/i;
 
   function isSensitiveField(element) {
     if (!(element instanceof Element)) return false;
-    const field = element.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"]');
+    const field = element.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])');
     if (!field) return false;
     const type = (field.getAttribute('type') || '').toLowerCase();
     if (type === 'password') return true;
     if (SENSITIVE_AUTOCOMPLETE.test(field.getAttribute('autocomplete') || '')) return true;
-    const hints = `${field.getAttribute('name') || ''} ${field.id || ''}`;
-    return SENSITIVE_NAME.test(hints);
+    const hints = ['name', 'id', 'aria-label', 'placeholder', 'data-testid']
+      .map((attr) => field.getAttribute(attr) || '')
+      .join(' ')
+      .replace(/([a-z])([A-Z0-9])/g, '$1 $2'); // userPin -> user Pin
+    return SENSITIVE_NAME.test(hints) || SENSITIVE_TOKEN.test(hints);
   }
 
   function sanitizeRulers(list) {
@@ -1680,7 +1870,7 @@
   }
 
   function handleLocalFocusIn(event) {
-    if (!uiState.mirrorClicks) return;
+    if (!uiState.enabled || !uiState.mirrorClicks) return;
     if (!event.isTrusted) return;
     if (isApplyingRemoteClick || performance.now() < remoteClickSuppressUntil) return;
     if (isInsideExtensionUi(event)) return;
@@ -1692,7 +1882,7 @@
   }
 
   function applyRemoteFocus(payload) {
-    if (!uiState.mirrorClicks) return;
+    if (!uiState.enabled || !uiState.mirrorClicks) return;
     const element = resolveClickTarget(payload);
     if (!element || !isFormInput(element) || isSensitiveField(element)) return;
     try {
@@ -1704,24 +1894,49 @@
 
   // ---- Ruler lines ----------------------------------------------------------
 
+  // Rulers and their settings bar live in their own fresh host with a closed
+  // shadow root, like the panel, so the page cannot reach or fake them.
+  function teardownRulerHost() {
+    hideRulerPopup();
+    if (rulerHost) rulerHost.remove();
+    rulerHost = null;
+    rulerShadow = null;
+    rulerLayer = null;
+  }
+
   function ensureRulerLayer() {
-    if (rulerLayer && rulerLayer.isConnected) return rulerLayer;
-    rulerLayer = document.getElementById('svss-ruler-layer');
-    if (!rulerLayer) {
-      rulerLayer = document.createElement('div');
-      rulerLayer.id = 'svss-ruler-layer';
-      rulerLayer.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;pointer-events:none;z-index:2147483640;overflow:visible;';
-      (document.documentElement || document.body).appendChild(rulerLayer);
+    const foreignIds = [RULER_HOST_ID, ...LEGACY_RULER_IDS];
+    if (rulerHost && rulerShadow && rulerLayer && rulerHost.isConnected && rulerHost.parentNode === document.documentElement) {
+      removeForeignNodes(foreignIds, rulerHost);
+      return rulerLayer;
     }
+
+    teardownRulerHost();
+    removeForeignNodes(foreignIds, null);
+    if (!document.documentElement) return null;
+
+    rulerHost = document.createElement('div');
+    rulerHost.id = RULER_HOST_ID;
+    const declarations = {
+      display: 'block', visibility: 'visible', opacity: '1', filter: 'none', transform: 'none',
+      'clip-path': 'none', mask: 'none', position: 'fixed', top: '0', left: '0', width: '0', height: '0',
+      margin: '0', padding: '0', border: '0', overflow: 'visible', 'pointer-events': 'none',
+      'z-index': '2147483640'
+    };
+    for (const [property, value] of Object.entries(declarations)) rulerHost.style.setProperty(property, value, 'important');
+    document.documentElement.appendChild(rulerHost);
+    rulerShadow = rulerHost.attachShadow({ mode: 'closed' });
+
+    rulerLayer = document.createElement('div');
+    rulerLayer.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;pointer-events:none;overflow:visible;';
+    rulerShadow.appendChild(rulerLayer);
     return rulerLayer;
   }
 
   function isInsideRulerUi(event) {
-    const target = event.target instanceof Element ? event.target : null;
-    if (!target) return false;
-    if (rulerLayer && (target === rulerLayer || rulerLayer.contains(target))) return true;
-    if (rulerPopup && (target === rulerPopup || rulerPopup.contains(target))) return true;
-    return false;
+    if (!rulerHost) return false;
+    const path = event.composedPath ? event.composedPath() : [];
+    return path.includes(rulerHost);
   }
 
   function rulerPopupTop(y, thickness) {
@@ -1747,10 +1962,10 @@
 
   function showRulerPopup(ruler) {
     hideRulerPopup();
+    if (!ensureRulerLayer() || !rulerShadow) return;
     const popupY = rulerPopupTop(ruler.y, ruler.thickness);
 
     rulerPopup = document.createElement('div');
-    rulerPopup.id = 'svss-ruler-popup';
     rulerPopup.dataset.svssForRuler = ruler.id;
     rulerPopup.style.cssText = [
       'position:fixed', 'left:12px', `top:${popupY}px`,
@@ -1774,7 +1989,11 @@
     thicknessInput.setAttribute('aria-label', t('rulerThickness', 'Thickness'));
     thicknessInput.value = String(ruler.thickness);
     thicknessInput.style.cssText = 'width:48px;height:26px;padding:0 4px;border:1px solid #3a4943;border-radius:6px;background:#1f2a27;color:#e6eeea;font:inherit;text-align:center;outline-color:#7ff0be;';
-    thicknessInput.addEventListener('change', () => {
+    thicknessInput.addEventListener('change', (e) => {
+      if (!isTrustedUiEvent(e, rulerHost)) {
+        thicknessInput.value = String(ruler.thickness);
+        return;
+      }
       const t = Math.max(1, Math.min(20, parseInt(thicknessInput.value, 10) || 1));
       thicknessInput.value = String(t);
       sendRuntimeMessage({ type: MSG.RULER_UPDATE, id: ruler.id, thickness: t });
@@ -1794,6 +2013,7 @@
     deleteBtn.addEventListener('mousedown', (e) => e.stopPropagation());
     deleteBtn.addEventListener('click', (e) => {
       e.stopPropagation();
+      if (!isTrustedUiEvent(e, rulerHost)) return;
       const id = ruler.id;
       deselectRuler();
       sendRuntimeMessage({ type: MSG.RULER_DELETE, id });
@@ -1803,7 +2023,7 @@
     rulerPopup.appendChild(thicknessInput);
     rulerPopup.appendChild(pxLabel);
     rulerPopup.appendChild(deleteBtn);
-    (document.documentElement || document.body).appendChild(rulerPopup);
+    rulerShadow.appendChild(rulerPopup);
   }
 
   function applyRulerColors() {
@@ -1846,6 +2066,7 @@
 
     el.addEventListener('mousedown', (event) => {
       if (event.button !== 0) return;
+      if (!isTrustedUiEvent(event, rulerHost)) return;
       event.preventDefault();
       event.stopPropagation();
       selectRuler(ruler.id);
@@ -1862,13 +2083,14 @@
 
   function renderRulers() {
     if (!rulers.length) {
-      if (rulerLayer) rulerLayer.textContent = '';
       if (selectedRulerId) deselectRuler();
       peerSelectedRulerId = null;
+      teardownRulerHost();
       return;
     }
 
     const layer = ensureRulerLayer();
+    if (!layer) return;
     const renderedIds = new Set();
 
     for (const ruler of rulers) {
@@ -1899,7 +2121,7 @@
       if (ruler) {
         rulerPopup.style.top = `${rulerPopupTop(ruler.y, ruler.thickness)}px`;
         const inp = rulerPopup.querySelector('input[type="number"]');
-        if (inp && document.activeElement !== inp) inp.value = String(ruler.thickness);
+        if (inp && rulerShadow?.activeElement !== inp) inp.value = String(ruler.thickness);
       }
     }
   }
@@ -1916,7 +2138,7 @@
   }
 
   function handleRulerMouseMove(event) {
-    if (!isDraggingRuler) return;
+    if (!isDraggingRuler || !event.isTrusted) return;
     event.preventDefault();
     event.stopPropagation();
     const delta = event.clientY - dragStartClientY;
@@ -1928,7 +2150,7 @@
   }
 
   function handleRulerMouseUp(event) {
-    if (!isDraggingRuler) return;
+    if (!isDraggingRuler || !event.isTrusted) return;
     event.stopPropagation();
     isDraggingRuler = false;
     const id = dragRulerId;
@@ -1943,10 +2165,11 @@
   }
 
   function handleRulerKeyDown(event) {
-    if (!selectedRulerId) return;
+    if (!selectedRulerId || !event.isTrusted) return;
     if (event.key !== 'Backspace' && event.key !== 'Delete') return;
     const active = document.activeElement;
     if (host && active === host) return;
+    if (rulerHost && active === rulerHost) return;
     if (active && active !== document.body && active.matches('input,textarea,select,[contenteditable="true"]')) return;
     event.preventDefault();
     const id = selectedRulerId;
@@ -2135,7 +2358,7 @@
   }
 
   function applyRemoteHover(payload) {
-    if (!uiState.mirrorHover) return;
+    if (!uiState.enabled || !uiState.mirrorHover) return;
     ensureForceHoverStyle();
     const element = resolveHoverTarget(payload);
     if (!element) {
@@ -2150,7 +2373,7 @@
   }
 
   function reconcileHoverFeatureState() {
-    if (!uiState.mirrorHover) {
+    if (!uiState.enabled || !uiState.mirrorHover) {
       clearForcedHover();
       teardownForceHoverStyle();
       lastHoverEl = null;
@@ -2161,7 +2384,7 @@
 
   function flushHoverSend() {
     hoverSendRafPending = false;
-    if (!uiState.mirrorHover) return;
+    if (!uiState.enabled || !uiState.mirrorHover) return;
     const element = pendingHoverEl;
     if (!(element instanceof Element)) return;
 
@@ -2181,7 +2404,7 @@
   }
 
   function handleLocalPointerMove(event) {
-    if (!uiState.mirrorHover) return;
+    if (!uiState.enabled || !uiState.mirrorHover) return;
     if (!event.isTrusted) return;            // ignore our own synthetic moves
     if (isApplyingRemoteHover) return;
     if (isInsideExtensionUi(event)) {
@@ -2281,13 +2504,13 @@
     }
 
     if (message.type === MSG.REMOTE_CLICK) {
-      applyRemoteClick(message.click);
+      if (isForThisOrigin(message)) applyRemoteClick(message.click);
       sendResponse({ ok: true });
       return false;
     }
 
     if (message.type === MSG.REMOTE_HOVER) {
-      applyRemoteHover(message.hover);
+      if (isForThisOrigin(message)) applyRemoteHover(message.hover);
       sendResponse({ ok: true });
       return false;
     }
@@ -2323,7 +2546,7 @@
     }
 
     if (message.type === MSG.REMOTE_FOCUS) {
-      applyRemoteFocus(message.focus);
+      if (isForThisOrigin(message)) applyRemoteFocus(message.focus);
       sendResponse({ ok: true });
       return false;
     }

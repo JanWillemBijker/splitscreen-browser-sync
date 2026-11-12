@@ -16,7 +16,7 @@ From the Chrome Web Store (once published), or locally:
 
 ## Privacy
 
-The extension collects no data, has no server, analytics or remote code, and only stores settings and per-pair state locally (`chrome.storage.local` / `chrome.storage.session`). Password, one-time-code and payment card fields are never read and clicks/focus on them are never mirrored. Full policy: [store/PRIVACY.md](store/PRIVACY.md).
+Nothing is sent to the developer or any server: no analytics and no remote code; settings and per-pair state stay in `chrome.storage.local` / `chrome.storage.session`. Between the two panes of a pair the extension does pass data from one site to the other: the scroll position, the path/query/hash of a navigation and (when enabled) a description of the clicked or hovered element. That only happens between the two sites (origins) the pair was started on. Password, one-time-code, PIN and payment card fields are never read and clicks/focus on them are never mirrored. Full policy: [store/PRIVACY.md](store/PRIVACY.md).
 
 ## Packaging for the Chrome Web Store
 
@@ -42,9 +42,10 @@ Made by BijBijker – https://bijbijker.nl
 - Keeps sync active after normal reloads and hard reloads.
 - Reloads one pane without reloading the other pane.
 - Can temporarily hide the WordPress admin bar while sync is active.
-- Optionally mirrors navigation between live/staging domains while preserving each side's origin.
-- Optionally mirrors interactive clicks between panes, including closing overlays by clicking outside them.
-- Optionally mirrors hover effects (CSS `:hover` styling and JS-driven hover menus) between panes.
+- Pins the two origins when sync starts (origin pinning) and pauses the pair when either pane opens a different site.
+- Mirrors navigation between the two pinned origins (live/staging) while preserving each side's origin (default on).
+- Optionally mirrors interactive clicks between panes, including closing overlays by clicking outside them (default off; never submits forms or triggers delete/pay/log-out style actions).
+- Mirrors hover effects (CSS `:hover` styling and JS-driven hover menus) between panes (default on).
 
 ## Changes in 1.1.0
 
@@ -62,6 +63,11 @@ Made by BijBijker – https://bijbijker.nl
 
 ### Security and store compliance
 
+- **Origin pinning.** Start sync records the origin of both panes. Navigation, clicks, focus and hover are only mirrored while both panes are still on those origins; the service worker re-checks the real tab URLs before relaying, and the receiving pane checks its own origin again. When a pane opens another site (or a non-http page) the pair is paused with the status *Paused: a different site was opened* in the popup and the on-page panel, until Start sync is pressed again (which pins the new origins). Navigation is never mirrored to or from an origin outside the pinned pair.
+- **Click mirroring is off by default** and never replays a click on a submit button, on anything inside a `method="post"` form (text fields only get focus), or on an element whose label/link reads like delete/remove/pay/confirm/buy/order/log out (also in Dutch). The other pane then shows *Click not mirrored (form/action)*.
+- **Page cannot drive the extension UI.** The on-page panel and the ruler lines each live in a freshly created host with a **closed** shadow root (any pre-existing `#svss-root`/ruler node is removed, never reused). Every UI handler ignores untrusted (`isTrusted === false`) events and checks that the host is still ours and visibly rendered; panel commands that start sync, change mirroring, reload or swap carry a user-gesture flag and are rejected by the service worker without it.
+- Scroll, navigation, click and hover messages are only sent by a page while its pair is syncing.
+- The sensitive-field check also covers `contenteditable="plaintext-only"` and fields named or labelled like PIN, SSN/BSN, 2FA/MFA/OTP/TOTP, verification or (auth) code.
 - Removed the `tabs` permission (host permissions already cover http/https tab URLs) and `web_accessible_resources` (the floating button icon is now drawn inline).
 - The service worker validates every message sender: page-facing messages only from the extension's own top-frame content script on an http/https page, settings messages only from the extension's own pages. The content script only accepts messages from the extension's service worker.
 - Ruler IDs, positions and thickness are validated; payloads are type-checked.
@@ -171,10 +177,10 @@ When clicked, the floating button is shown for the current Split View group for 
 The popup also exposes the starting values for the per-group options, so a new
 split screen pairing begins with your preferred configuration:
 
-- Hide WordPress admin bar
-- Sync navigation
-- Mirror clicks
-- Mirror hover effects
+- Hide WordPress admin bar (default on)
+- Sync navigation (default on)
+- Mirror clicks (default off)
+- Mirror hover effects (default on)
 
 These defaults are applied when a split screen pairing is first detected. They
 do not retroactively change a pairing that already exists in the current
@@ -228,11 +234,23 @@ A MutationObserver reapplies the fix if WordPress or admin scripts modify the DO
 
 When sync stops or the option is disabled, the style element is removed again and inline top offset changes are restored.
 
+## Origin pinning
+
+When you press **Start sync** (popup, on-page panel or shortcut) the extension
+records the origin (scheme + host + port) of both panes, for example
+`https://live.nl` and `https://staging.live.nl`. Navigation, clicks, focus and
+hover are only mirrored while both panes are still on those two origins.
+
+If either pane navigates to a different site (or to a non-http page), the pair
+is paused and the popup and on-page panel show **Paused: a different site was
+opened**. Press **Start sync** again to sync the two sites that are now open;
+that pins the new origins.
+
 ## Navigation sync
 
 Default: on for new pairs (change it under **Defaults for new Split Views** in the popup).
 
-When **Sync navigation** is enabled for a Split View group, navigating one side mirrors the same path, query string, and hash to the other side while preserving the other side's origin.
+When **Sync navigation** is enabled for a Split View group, navigating one side mirrors the same path, query string, and hash to the other side while preserving the other side's pinned origin. URLs are only ever built on the pinned origin of the other pane; navigation to or from any other origin pauses the pair instead of being mirrored.
 
 Example:
 
@@ -257,11 +275,26 @@ The same works from right to left.
 
 Navigation sync only mirrors normal HTTP/HTTPS URLs. It does not mirror `chrome://`, `chrome-extension://`, `about:`, `file://`, or Chrome Web Store pages.
 
+Note that the path and query string (including any tokens in it) of one pinned site are opened on the other pinned site. Only start sync for two sites you trust with each other's URLs.
+
 ## Mirror clicks
 
-Default: on for new pairs. Toggle: **Mirror clicks** (per Split View group).
+Default: **off** for new pairs. Toggle: **Mirror clicks** (per Split View group).
 
-When enabled, every primary (left) mouse click on one pane is reproduced on the
+Click mirroring replays your clicks on the other site, which can trigger actions
+there. It is therefore opt-in, only works between the two pinned origins, and
+never replays a click on:
+
+- a submit button (`<button>` in a form, `input[type=submit|image]`);
+- any control inside a `method="post"` form (text fields only receive focus);
+- an element whose visible label, `aria-label`, `title` or link reads like
+  delete, remove, pay, confirm, buy, order, checkout or log out (also
+  verwijder, betaal, bevestig, koop, bestel, afrekenen, uitloggen, afmelden).
+
+In those cases the other pane shows a short *Click not mirrored (form/action)*
+message.
+
+When enabled, every other primary (left) mouse click on one pane is reproduced on the
 other pane. This intentionally includes clicks on non-button elements such as
 modal backdrops, so closing an overlay by clicking outside the popup is mirrored
 as well.
@@ -296,7 +329,7 @@ silently. Clicks inside the extension's own floating UI are never mirrored.
 
 ## Mirror hover effects
 
-Default: on for new pairs. Toggle: **Mirror hover effects** (per Split View group).
+Default: on for new pairs. Toggle: **Mirror hover effects** (per Split View group). Like clicks, hover is only mirrored between the two pinned origins.
 
 When enabled, hovering an element on one pane reproduces the hover state on the
 matching element on the other pane, so hover styling can be checked visually
@@ -388,6 +421,8 @@ chrome://extensions/shortcuts
 ### Navigation sync
 
 - [ ] **Sync navigation** is on by default for a new pair.
+- [ ] Navigate one pane to a different site: the pair pauses, the popup and panel show *Paused: a different site was opened*, nothing is mirrored to the other pane.
+- [ ] Press **Start sync** again: the new origins are pinned and sync resumes.
 - [ ] Open live/staging pages with different origins and the same path.
 - [ ] Enable **Sync navigation**.
 - [ ] Navigate on the left side.
@@ -398,7 +433,8 @@ chrome://extensions/shortcuts
 
 ### Mirror clicks
 
-- [ ] **Mirror clicks** is on by default for a new pair (or enable it).
+- [ ] **Mirror clicks** is off by default for a new pair; enable it.
+- [ ] Clicking a submit button, a control in a POST form, or a *Delete*/*Log out* link on one side is not replayed; the other side shows *Click not mirrored (form/action)*.
 - [ ] Click a normal button, menu button, search button, or accordion button on one side.
 - [ ] The other side clicks the matching element.
 - [ ] Open a modal/overlay, then click outside it (on the backdrop); the other side closes its overlay too.
@@ -408,7 +444,7 @@ chrome://extensions/shortcuts
 
 ### Mirror hover effects
 
-- [ ] **Mirror hover effects** is on by default for a new pair (or enable it).
+- [ ] **Mirror hover effects** is on by default for a new pair.
 - [ ] Hover a link or button with a CSS hover style on one side; the same element shows the hover style on the other side.
 - [ ] Hover a menu that opens a submenu on hover; the submenu opens on the other side.
 - [ ] Move the mouse away; the hover style and submenu clear on the other side.

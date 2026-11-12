@@ -90,13 +90,13 @@
     "message": "Sync navigation"
   },
   "optNavigationHelp": {
-    "message": "Opens the same path on the other side, on its own domain."
+    "message": "Opens the same path on the other side, only between the two synced sites."
   },
   "optClicks": {
     "message": "Mirror clicks"
   },
   "optClicksHelp": {
-    "message": "Repeats clicks on the matching element. Never on password or payment fields."
+    "message": "Repeats clicks on the matching element. Never on forms, payment or delete actions."
   },
   "optHover": {
     "message": "Mirror hover effects"
@@ -223,5 +223,17 @@
   },
   "panelTitle": {
     "message": "SplitScreen Sync"
+  },
+  "statusOriginPausedTitle": {
+    "message": "Paused: a different site was opened"
+  },
+  "statusOriginPausedBody": {
+    "message": "One pane left the site you started sync for. Press Start sync to sync these two sites."
+  },
+  "pillOriginPaused": {
+    "message": "Paused: different site"
+  },
+  "toastClickSkipped": {
+    "message": "Click not mirrored (form/action)"
   }
 }
