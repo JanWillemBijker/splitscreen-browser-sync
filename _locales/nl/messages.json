@@ -348,5 +348,145 @@
   },
   "sideRightLower": {
     "message": "rechts"
+  },
+  "tabChecklist": {
+    "message": "Checklist"
+  },
+  "checklistHelp": {
+    "message": "Paden om één voor één op beide sites te controleren. Bewaard voor dit paar sites."
+  },
+  "checklistEmpty": {
+    "message": "Nog geen pagina's. Plak hieronder paden of URL's, of voeg de huidige pagina toe."
+  },
+  "checklistProgress": {
+    "message": "$DONE$ van $TOTAL$ gecontroleerd",
+    "placeholders": {
+      "done": {
+        "content": "$1",
+        "example": "3"
+      },
+      "total": {
+        "content": "$2",
+        "example": "12"
+      }
+    }
+  },
+  "checklistFailCount": {
+    "message": "$COUNT$ fout",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "2"
+      }
+    }
+  },
+  "checklistPosition": {
+    "message": "Pagina $INDEX$ van $TOTAL$",
+    "placeholders": {
+      "index": {
+        "content": "$1",
+        "example": "3"
+      },
+      "total": {
+        "content": "$2",
+        "example": "12"
+      }
+    }
+  },
+  "checklistNoCurrent": {
+    "message": "Klik op Volgende om de eerste pagina in beide helften te openen."
+  },
+  "checklistNeedSync": {
+    "message": "Start de sync één keer zodat beide sites bekend zijn; daarna opent Vorige/Volgende de pagina's."
+  },
+  "btnPrev": {
+    "message": "Vorige"
+  },
+  "btnNext": {
+    "message": "Volgende"
+  },
+  "statusOk": {
+    "message": "Goed"
+  },
+  "statusFail": {
+    "message": "Fout"
+  },
+  "statusNa": {
+    "message": "N.v.t."
+  },
+  "statusOpen": {
+    "message": "Niet gecontroleerd"
+  },
+  "checklistStatusLabel": {
+    "message": "Resultaat voor deze pagina"
+  },
+  "checklistNote": {
+    "message": "Notitie"
+  },
+  "checklistNotePlaceholder": {
+    "message": "Wat is er anders?"
+  },
+  "checklistPastePlaceholder": {
+    "message": "/prijzen/\n/contact/\nhttps://example.com/over-ons/"
+  },
+  "checklistPasteLabel": {
+    "message": "Paden of URL's, één per regel"
+  },
+  "btnAddPaths": {
+    "message": "Toevoegen"
+  },
+  "btnAddCurrent": {
+    "message": "Huidige pagina toevoegen"
+  },
+  "btnExportCsv": {
+    "message": "CSV exporteren"
+  },
+  "btnCopyText": {
+    "message": "Kopiëren als tekst"
+  },
+  "btnClearList": {
+    "message": "Lijst wissen"
+  },
+  "btnClearConfirm": {
+    "message": "Klik nogmaals om te wissen"
+  },
+  "checklistAdded": {
+    "message": "$COUNT$ toegevoegd",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "3"
+      }
+    }
+  },
+  "checklistCopied": {
+    "message": "Gekopieerd naar het klembord"
+  },
+  "checklistRemove": {
+    "message": "$PATH$ verwijderen",
+    "placeholders": {
+      "path": {
+        "content": "$1",
+        "example": "/pricing/"
+      }
+    }
+  },
+  "checklistOpen": {
+    "message": "$PATH$ in beide helften openen",
+    "placeholders": {
+      "path": {
+        "content": "$1",
+        "example": "/pricing/"
+      }
+    }
+  },
+  "checklistAllPages": {
+    "message": "Alle pagina's"
+  },
+  "csvHeader": {
+    "message": "#,Pad,Resultaat,Notitie,URL links,URL rechts"
+  },
+  "sectionChecklist": {
+    "message": "Checklist"
   }
 }

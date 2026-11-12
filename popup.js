@@ -9,6 +9,13 @@ const MSG = Object.freeze({
   POPUP_SET_GROUP_OPTION: 'SVSS_POPUP_SET_GROUP_OPTION',
   POPUP_SET_GROUP_CHOICE: 'SVSS_POPUP_SET_GROUP_CHOICE',
   POPUP_SET_PANE_WIDTH: 'SVSS_POPUP_SET_PANE_WIDTH',
+  POPUP_CHECKLIST_GET: 'SVSS_POPUP_CHECKLIST_GET',
+  POPUP_CHECKLIST_ADD: 'SVSS_POPUP_CHECKLIST_ADD',
+  POPUP_CHECKLIST_ADD_CURRENT: 'SVSS_POPUP_CHECKLIST_ADD_CURRENT',
+  POPUP_CHECKLIST_UPDATE: 'SVSS_POPUP_CHECKLIST_UPDATE',
+  POPUP_CHECKLIST_REMOVE: 'SVSS_POPUP_CHECKLIST_REMOVE',
+  POPUP_CHECKLIST_CLEAR: 'SVSS_POPUP_CHECKLIST_CLEAR',
+  POPUP_CHECKLIST_GO: 'SVSS_POPUP_CHECKLIST_GO',
   POPUP_RULER_ADD: 'SVSS_POPUP_RULER_ADD'
 });
 
@@ -204,6 +211,7 @@ function renderStatus(status) {
   for (const el of document.querySelectorAll('[data-needs-pair]')) el.hidden = !inSplit;
   for (const el of document.querySelectorAll('[data-need-pair-hint]')) el.hidden = inSplit;
   renderPaneSizes(group.paneSizes || {});
+  if (inSplit && currentTab() === 'checklist') loadChecklist();
 
   showCurrent.disabled = !inSplit;
   addRuler.disabled = !inSplit;
@@ -305,6 +313,255 @@ for (const button of document.querySelectorAll('[data-preset]')) {
     }
   });
 }
+
+// ---- Checklist tab --------------------------------------------------------------
+
+let checklist = null;
+let noteTimer = null;
+let clearArmed = false;
+const STATUS_KEYS = { ok: 'statusOk', fail: 'statusFail', na: 'statusNa' };
+
+function hostOf(origin) {
+  try { return new URL(origin).host; } catch (_error) { return ''; }
+}
+
+function setChecklistResult(text) {
+  $('checklistResult').textContent = text || '';
+}
+
+function renderChecklist(data) {
+  if (data) checklist = data;
+  const c = checklist;
+  if (!c || !c.available) return;
+  const items = Array.isArray(c.items) ? c.items : [];
+  const index = Number.isInteger(c.index) ? c.index : -1;
+  const done = items.filter((item) => item.status).length;
+  const fails = items.filter((item) => item.status === 'fail').length;
+
+  $('checklistOrigins').textContent = [hostOf(c.leftOrigin), hostOf(c.rightOrigin)].filter(Boolean).join(' ↔ ');
+  $('checklistEmpty').hidden = items.length > 0;
+  $('checklistProgressWrap').hidden = !items.length;
+  $('checklistCurrent').hidden = !items.length;
+  $('checklistListWrap').hidden = !items.length;
+  $('checklistExport').hidden = !items.length;
+
+  $('checklistProgress').textContent = t('checklistProgress', [String(done), String(items.length)]);
+  $('checklistFails').textContent = fails ? t('checklistFailCount', [String(fails)]) : '';
+  const bar = $('checklistBar');
+  bar.setAttribute('aria-valuemax', String(items.length));
+  bar.setAttribute('aria-valuenow', String(done));
+  bar.setAttribute('aria-valuetext', $('checklistProgress').textContent);
+  $('checklistBarFill').style.width = items.length ? `${Math.round((done / items.length) * 100)}%` : '0';
+
+  const current = items[index] || null;
+  $('checklistPos').textContent = current ? t('checklistPosition', [String(index + 1), String(items.length)]) : '';
+  $('checklistPath').textContent = current ? current.path : '';
+  $('checklistPath').hidden = !current;
+  const hint = !c.canNavigate ? t('checklistNeedSync') : (current ? '' : t('checklistNoCurrent'));
+  $('checklistHint').textContent = hint;
+  $('checklistHint').hidden = !hint;
+  $('checklistPrev').disabled = !c.canNavigate || index <= 0;
+  $('checklistNext').disabled = !c.canNavigate || index >= items.length - 1;
+  for (const chip of document.querySelectorAll('#checklistStatus .chip')) {
+    chip.disabled = !current;
+    chip.setAttribute('aria-pressed', current && current.status === chip.dataset.status ? 'true' : 'false');
+  }
+  const note = $('checklistNote');
+  note.disabled = !current;
+  if (document.activeElement !== note) note.value = current ? current.note || '' : '';
+
+  const list = $('checklistList');
+  const focusedIndex = document.activeElement?.closest?.('.check-item')?.dataset.index ?? null;
+  const focusedRole = document.activeElement?.dataset?.role || null;
+  list.textContent = '';
+  items.forEach((item, i) => {
+    const li = document.createElement('li');
+    li.className = 'check-item';
+    li.dataset.index = String(i);
+    if (i === index) li.setAttribute('aria-current', 'true');
+    const dot = document.createElement('span');
+    dot.className = 'check-dot';
+    if (item.status) dot.dataset.status = item.status;
+    dot.setAttribute('role', 'img');
+    dot.setAttribute('aria-label', t(item.status ? STATUS_KEYS[item.status] : 'statusOpen'));
+    const open = document.createElement('button');
+    open.type = 'button';
+    open.className = 'check-open';
+    open.dataset.role = 'open';
+    open.textContent = item.path;
+    open.title = item.note ? `${item.path} · ${item.note}` : item.path;
+    open.setAttribute('aria-label', t('checklistOpen', [item.path]));
+    open.disabled = !c.canNavigate;
+    open.addEventListener('click', () => checklistCall({ type: MSG.POPUP_CHECKLIST_GO, index: i }));
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'check-remove';
+    remove.dataset.role = 'remove';
+    remove.setAttribute('aria-label', t('checklistRemove', [item.path]));
+    remove.appendChild(crossIcon());
+    remove.addEventListener('click', () => checklistCall({ type: MSG.POPUP_CHECKLIST_REMOVE, index: i }));
+    li.append(dot, open, remove);
+    list.appendChild(li);
+  });
+  if (focusedIndex !== null && focusedRole) {
+    const again = list.querySelector(`.check-item[data-index="${focusedIndex}"] [data-role="${focusedRole}"]`)
+      || list.querySelector(`.check-item:last-child [data-role="${focusedRole}"]`);
+    if (again) again.focus();
+  }
+}
+
+function crossIcon() {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 10 10');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('focusable', 'false');
+  const path = document.createElementNS(ns, 'path');
+  path.setAttribute('d', 'M1 1l8 8M9 1L1 9');
+  svg.appendChild(path);
+  return svg;
+}
+
+async function checklistCall(message) {
+  const data = await sendMessage(message);
+  if (data && data.ok) renderChecklist(data);
+  return data;
+}
+
+async function loadChecklist() {
+  await checklistCall({ type: MSG.POPUP_CHECKLIST_GET });
+}
+
+function currentChecklistIndex() {
+  return checklist && Number.isInteger(checklist.index) ? checklist.index : -1;
+}
+
+$('checklistPrev').addEventListener('click', () => checklistCall({ type: MSG.POPUP_CHECKLIST_GO, step: -1 }));
+$('checklistNext').addEventListener('click', () => checklistCall({ type: MSG.POPUP_CHECKLIST_GO, step: 1 }));
+
+for (const chip of document.querySelectorAll('#checklistStatus .chip')) {
+  chip.addEventListener('click', () => {
+    const index = currentChecklistIndex();
+    const item = checklist?.items?.[index];
+    if (!item) return;
+    const status = item.status === chip.dataset.status ? null : chip.dataset.status;
+    checklistCall({ type: MSG.POPUP_CHECKLIST_UPDATE, index, status });
+  });
+}
+
+$('checklistNote').addEventListener('input', () => {
+  if (noteTimer) clearTimeout(noteTimer);
+  const index = currentChecklistIndex();
+  const note = $('checklistNote').value;
+  noteTimer = setTimeout(() => {
+    noteTimer = null;
+    checklistCall({ type: MSG.POPUP_CHECKLIST_UPDATE, index, note });
+  }, 400);
+});
+
+$('checklistAdd').addEventListener('click', async () => {
+  const paste = $('checklistPaste');
+  const data = await checklistCall({ type: MSG.POPUP_CHECKLIST_ADD, text: paste.value });
+  if (data?.ok) {
+    paste.value = '';
+    setChecklistResult(t('checklistAdded', [String(data.added || 0)]));
+  }
+});
+
+$('checklistAddCurrent').addEventListener('click', async () => {
+  const data = await checklistCall({ type: MSG.POPUP_CHECKLIST_ADD_CURRENT });
+  if (data?.ok) setChecklistResult(t('checklistAdded', [String(data.added || 0)]));
+});
+
+$('checklistClear').addEventListener('click', async () => {
+  const button = $('checklistClear');
+  if (!clearArmed) {
+    clearArmed = true;
+    button.textContent = t('btnClearConfirm');
+    setTimeout(() => {
+      clearArmed = false;
+      button.textContent = t('btnClearList');
+    }, 3000);
+    return;
+  }
+  clearArmed = false;
+  button.textContent = t('btnClearList');
+  await checklistCall({ type: MSG.POPUP_CHECKLIST_CLEAR });
+});
+
+function statusLabel(status) {
+  return status ? t(STATUS_KEYS[status]) : '';
+}
+
+function urlOn(origin, path) {
+  try { return new URL(path, origin).href; } catch (_error) { return ''; }
+}
+
+// Spreadsheet apps run cells that start with = + - @ as formulas; a leading
+// apostrophe keeps them as text.
+function csvCell(value) {
+  let text = String(value ?? '');
+  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function checklistCsv() {
+  const c = checklist;
+  const rows = [t('csvHeader')];
+  c.items.forEach((item, i) => {
+    rows.push([
+      i + 1,
+      item.path,
+      statusLabel(item.status),
+      item.note || '',
+      urlOn(c.leftOrigin, item.path),
+      urlOn(c.rightOrigin, item.path)
+    ].map(csvCell).join(','));
+  });
+  return `\ufeff${rows.join('\r\n')}\r\n`;
+}
+
+function checklistText() {
+  const c = checklist;
+  const marks = { ok: '✓', fail: '✗', na: '–' };
+  const lines = [[hostOf(c.leftOrigin), hostOf(c.rightOrigin)].filter(Boolean).join(' ↔ ')];
+  for (const item of c.items) {
+    const mark = item.status ? marks[item.status] : '○';
+    const label = item.status ? ` (${statusLabel(item.status)})` : '';
+    lines.push(`${mark} ${item.path}${label}${item.note ? ` — ${item.note}` : ''}`);
+  }
+  lines.push('', t('checklistProgress', [String(c.items.filter((i) => i.status).length), String(c.items.length)]));
+  return lines.join('\n');
+}
+
+$('checklistCsv').addEventListener('click', () => {
+  if (!checklist?.items?.length) return;
+  const blob = new Blob([checklistCsv()], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  const date = new Date().toISOString().slice(0, 10);
+  const host = hostOf(checklist.rightOrigin || checklist.leftOrigin).replace(/[^a-z0-9.-]/gi, '_') || 'pages';
+  link.href = url;
+  link.download = `checklist-${host}-${date}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+});
+
+$('checklistCopy').addEventListener('click', async () => {
+  if (!checklist?.items?.length) return;
+  try {
+    await navigator.clipboard.writeText(checklistText());
+    setChecklistResult(t('checklistCopied'));
+  } catch (_error) {
+    setChecklistResult('');
+  }
+});
+
+document.addEventListener('svss-tab', (event) => {
+  if (event.detail === 'checklist') loadChecklist();
+});
 
 $('openShortcuts').addEventListener('click', () => {
   chrome.tabs.create({ url: 'chrome://extensions/shortcuts' }).catch(() => undefined);

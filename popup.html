@@ -43,6 +43,7 @@
 
     <div class="tabs" role="tablist" data-i18n-aria="tabsLabel">
       <button type="button" class="tab" role="tab" id="tab-sync" aria-controls="panel-sync" data-tab="sync" data-i18n="tabSync"></button>
+      <button type="button" class="tab" role="tab" id="tab-checklist" aria-controls="panel-checklist" data-tab="checklist" data-i18n="tabChecklist"></button>
       <button type="button" class="tab" role="tab" id="tab-compare" aria-controls="panel-compare" data-tab="compare" data-i18n="tabCompare"></button>
       <button type="button" class="tab" role="tab" id="tab-settings" aria-controls="panel-settings" data-tab="settings" data-i18n="tabSettings"></button>
     </div>
@@ -138,6 +139,66 @@
             </button>
             <button id="showCurrent" type="button" class="btn btn-secondary"></button>
           </div>
+        </div>
+      </section>
+
+      <!-- Checklist: pages to check on both sites. -->
+      <section class="panel" role="tabpanel" id="panel-checklist" aria-labelledby="tab-checklist" tabindex="0" hidden>
+        <p class="empty-hint" data-need-pair-hint data-i18n="needPairHint"></p>
+
+        <div class="group" id="checklistGroup" data-needs-pair>
+          <div class="group-head">
+            <p class="group-help" data-i18n="checklistHelp"></p>
+            <p class="origins" id="checklistOrigins"></p>
+          </div>
+
+          <div class="progress" id="checklistProgressWrap" hidden>
+            <div class="progress-text"><span id="checklistProgress"></span><span id="checklistFails" class="fails"></span></div>
+            <div class="progress-bar" role="progressbar" id="checklistBar" aria-valuemin="0"><span id="checklistBarFill"></span></div>
+          </div>
+
+          <div class="current" id="checklistCurrent" hidden>
+            <div class="current-head">
+              <span class="current-pos" id="checklistPos"></span>
+              <div class="nav-buttons">
+                <button type="button" class="btn btn-secondary btn-small" id="checklistPrev" data-i18n="btnPrev"></button>
+                <button type="button" class="btn btn-primary btn-small" id="checklistNext" data-i18n="btnNext"></button>
+              </div>
+            </div>
+            <p class="current-path" id="checklistPath"></p>
+            <p class="empty-hint" id="checklistHint"></p>
+            <div class="status-buttons" role="group" data-i18n-aria="checklistStatusLabel" id="checklistStatus">
+              <button type="button" class="chip chip-ok" data-status="ok" aria-pressed="false" data-i18n="statusOk"></button>
+              <button type="button" class="chip chip-fail" data-status="fail" aria-pressed="false" data-i18n="statusFail"></button>
+              <button type="button" class="chip chip-na" data-status="na" aria-pressed="false" data-i18n="statusNa"></button>
+            </div>
+            <label class="field">
+              <span class="field-label" data-i18n="checklistNote"></span>
+              <textarea id="checklistNote" rows="2" maxlength="1000" data-i18n-placeholder="checklistNotePlaceholder"></textarea>
+            </label>
+          </div>
+
+          <p class="empty-hint" id="checklistEmpty" data-i18n="checklistEmpty"></p>
+
+          <details class="list-details" id="checklistListWrap" hidden>
+            <summary class="group-summary"><span class="group-title" data-i18n="checklistAllPages"></span><svg class="chevron" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M6 4l4 4-4 4"/></svg></summary>
+            <ol class="check-list" id="checklistList"></ol>
+          </details>
+
+          <label class="field">
+            <span class="field-label" data-i18n="checklistPasteLabel"></span>
+            <textarea id="checklistPaste" rows="3" data-i18n-placeholder="checklistPastePlaceholder"></textarea>
+          </label>
+          <div class="row-buttons">
+            <button type="button" class="btn btn-secondary btn-small" id="checklistAdd" data-i18n="btnAddPaths"></button>
+            <button type="button" class="btn btn-secondary btn-small" id="checklistAddCurrent" data-i18n="btnAddCurrent"></button>
+          </div>
+          <div class="row-buttons row-export" id="checklistExport" hidden>
+            <button type="button" class="btn btn-secondary btn-small" id="checklistCsv" data-i18n="btnExportCsv"></button>
+            <button type="button" class="btn btn-secondary btn-small" id="checklistCopy" data-i18n="btnCopyText"></button>
+            <button type="button" class="link-button link-danger" id="checklistClear" data-i18n="btnClearList"></button>
+          </div>
+          <p class="result-line" id="checklistResult" role="status" aria-live="polite"></p>
         </div>
       </section>
 

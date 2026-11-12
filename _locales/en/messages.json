@@ -348,5 +348,145 @@
   },
   "sideRightLower": {
     "message": "right"
+  },
+  "tabChecklist": {
+    "message": "Checklist"
+  },
+  "checklistHelp": {
+    "message": "Paths to check one by one on both sites. Saved for this pair of sites."
+  },
+  "checklistEmpty": {
+    "message": "No pages yet. Paste paths or URLs below, or add the current page."
+  },
+  "checklistProgress": {
+    "message": "$DONE$ of $TOTAL$ checked",
+    "placeholders": {
+      "done": {
+        "content": "$1",
+        "example": "3"
+      },
+      "total": {
+        "content": "$2",
+        "example": "12"
+      }
+    }
+  },
+  "checklistFailCount": {
+    "message": "$COUNT$ wrong",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "2"
+      }
+    }
+  },
+  "checklistPosition": {
+    "message": "Page $INDEX$ of $TOTAL$",
+    "placeholders": {
+      "index": {
+        "content": "$1",
+        "example": "3"
+      },
+      "total": {
+        "content": "$2",
+        "example": "12"
+      }
+    }
+  },
+  "checklistNoCurrent": {
+    "message": "Press Next to open the first page in both panes."
+  },
+  "checklistNeedSync": {
+    "message": "Start sync once so both sites are known; then Previous/Next opens the pages."
+  },
+  "btnPrev": {
+    "message": "Previous"
+  },
+  "btnNext": {
+    "message": "Next"
+  },
+  "statusOk": {
+    "message": "Good"
+  },
+  "statusFail": {
+    "message": "Wrong"
+  },
+  "statusNa": {
+    "message": "N/A"
+  },
+  "statusOpen": {
+    "message": "Not checked"
+  },
+  "checklistStatusLabel": {
+    "message": "Result for this page"
+  },
+  "checklistNote": {
+    "message": "Note"
+  },
+  "checklistNotePlaceholder": {
+    "message": "What is different?"
+  },
+  "checklistPastePlaceholder": {
+    "message": "/pricing/\n/contact/\nhttps://example.com/about/"
+  },
+  "checklistPasteLabel": {
+    "message": "Paths or URLs, one per line"
+  },
+  "btnAddPaths": {
+    "message": "Add"
+  },
+  "btnAddCurrent": {
+    "message": "Add current page"
+  },
+  "btnExportCsv": {
+    "message": "Export CSV"
+  },
+  "btnCopyText": {
+    "message": "Copy as text"
+  },
+  "btnClearList": {
+    "message": "Clear list"
+  },
+  "btnClearConfirm": {
+    "message": "Click again to clear"
+  },
+  "checklistAdded": {
+    "message": "$COUNT$ added",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "3"
+      }
+    }
+  },
+  "checklistCopied": {
+    "message": "Copied to the clipboard"
+  },
+  "checklistRemove": {
+    "message": "Remove $PATH$",
+    "placeholders": {
+      "path": {
+        "content": "$1",
+        "example": "/pricing/"
+      }
+    }
+  },
+  "checklistOpen": {
+    "message": "Open $PATH$ in both panes",
+    "placeholders": {
+      "path": {
+        "content": "$1",
+        "example": "/pricing/"
+      }
+    }
+  },
+  "checklistAllPages": {
+    "message": "All pages"
+  },
+  "csvHeader": {
+    "message": "#,Path,Result,Note,Left URL,Right URL"
+  },
+  "sectionChecklist": {
+    "message": "Checklist"
   }
 }

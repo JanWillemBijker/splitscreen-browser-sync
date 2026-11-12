@@ -94,6 +94,13 @@ const MSG = Object.freeze({
   VIEWPORT: 'SVSS_VIEWPORT',
   GET_VIEWPORT: 'SVSS_GET_VIEWPORT',
   POPUP_SET_PANE_WIDTH: 'SVSS_POPUP_SET_PANE_WIDTH',
+  POPUP_CHECKLIST_GET: 'SVSS_POPUP_CHECKLIST_GET',
+  POPUP_CHECKLIST_ADD: 'SVSS_POPUP_CHECKLIST_ADD',
+  POPUP_CHECKLIST_ADD_CURRENT: 'SVSS_POPUP_CHECKLIST_ADD_CURRENT',
+  POPUP_CHECKLIST_UPDATE: 'SVSS_POPUP_CHECKLIST_UPDATE',
+  POPUP_CHECKLIST_REMOVE: 'SVSS_POPUP_CHECKLIST_REMOVE',
+  POPUP_CHECKLIST_CLEAR: 'SVSS_POPUP_CHECKLIST_CLEAR',
+  POPUP_CHECKLIST_GO: 'SVSS_POPUP_CHECKLIST_GO',
   REMOTE_FIELD_INPUT: 'SVSS_REMOTE_FIELD_INPUT'
 });
 
@@ -117,7 +124,9 @@ const CMD = Object.freeze({
   SET_CLICK_MIRRORING: 'SET_CLICK_MIRRORING',
   SET_HOVER_MIRRORING: 'SET_HOVER_MIRRORING',
   SET_SHOW_CURSOR: 'SET_SHOW_CURSOR',
-  SET_ALIGN_MODE: 'SET_ALIGN_MODE'
+  SET_ALIGN_MODE: 'SET_ALIGN_MODE',
+  CHECKLIST_GO: 'CHECKLIST_GO',
+  CHECKLIST_MARK: 'CHECKLIST_MARK'
 });
 
 // Panel commands that set one of EXTRA_BOOL_OPTIONS / CHOICE_OPTIONS.
@@ -169,6 +178,8 @@ const GESTURE_REQUIRED_COMMANDS = new Set([
   CMD.SET_CLICK_MIRRORING,
   CMD.SET_HOVER_MIRRORING,
   CMD.SET_SHOW_CURSOR,
+  CMD.CHECKLIST_GO,
+  CMD.CHECKLIST_MARK,
   ...Object.keys(OPTION_COMMANDS)
 ]);
 
@@ -659,6 +670,7 @@ function buildUiStateForTab(group, tabId, show = true) {
     wpAdminBarHidden: enabled && Boolean(group.hideWpAdminBar),
     rulers: Array.isArray(group.rulers) ? group.rulers : [],
     paneSizes: paneSizesFor(group),
+    checklist: checklistSummary(group),
     color,
     statusText,
     reloading,
@@ -684,6 +696,7 @@ async function sendHiddenState(tabId, reason) {
 async function sendGroupState(group, targetTabId = null) {
   const tabIds = targetTabId ? [targetTabId] : groupTabIds(group);
   const show = await shouldShowFloatingUi(group);
+  await getChecklists();
 
   for (const tabId of tabIds) {
     const tab = await safeGetTab(tabId);
@@ -845,6 +858,278 @@ async function scanWindow(windowId = null) {
 
   scheduleSaveState();
   return state;
+}
+
+// ---- Page checklist -----------------------------------------------------------
+// A list of paths to check page by page (live vs staging), stored per pair
+// of origins in chrome.storage.local: path, status (ok / fail / na) and a
+// note. Previous/next opens the path in both panes, each on its own pinned
+// origin; nothing navigates outside the two pinned origins.
+const CHECKLISTS_KEY = 'svssChecklists';
+const MAX_CHECKLIST_ITEMS = 500;
+const MAX_CHECKLISTS = 50;
+const MAX_PATH_LENGTH = 2000;
+const MAX_NOTE_LENGTH = 1000;
+const CHECK_STATUSES = new Set(['ok', 'fail', 'na']);
+
+let checklistsCache = null;
+let checklistsPromise = null;
+let checklistsSaveTimer = null;
+
+function normalizeChecklists(raw) {
+  const out = {};
+  for (const [key, list] of Object.entries(plainObjectOr(raw))) {
+    if (typeof key !== 'string' || key.length > 600 || !list || typeof list !== 'object') continue;
+    const items = (Array.isArray(list.items) ? list.items : [])
+      .filter((item) => item && typeof item.path === 'string')
+      .slice(0, MAX_CHECKLIST_ITEMS)
+      .map((item) => ({
+        path: item.path.slice(0, MAX_PATH_LENGTH),
+        status: CHECK_STATUSES.has(item.status) ? item.status : null,
+        note: typeof item.note === 'string' ? item.note.slice(0, MAX_NOTE_LENGTH) : ''
+      }));
+    const index = Number.isInteger(list.index) ? Math.max(-1, Math.min(items.length - 1, list.index)) : -1;
+    out[key] = { items, index, updatedAt: Number(list.updatedAt) || 0 };
+  }
+  return out;
+}
+
+function getChecklists() {
+  if (checklistsCache) return Promise.resolve(checklistsCache);
+  if (!checklistsPromise) {
+    checklistsPromise = (async () => {
+      let loaded;
+      try {
+        loaded = normalizeChecklists((await chrome.storage.local.get(CHECKLISTS_KEY))[CHECKLISTS_KEY]);
+      } catch (_error) {
+        loaded = {};
+      }
+      if (!checklistsCache) checklistsCache = loaded;
+      return checklistsCache;
+    })();
+  }
+  return checklistsPromise;
+}
+
+function scheduleSaveChecklists() {
+  if (checklistsSaveTimer) clearTimeout(checklistsSaveTimer);
+  checklistsSaveTimer = setTimeout(async () => {
+    checklistsSaveTimer = null;
+    const lists = checklistsCache || {};
+    // Keep the most recently used lists only.
+    const keys = Object.keys(lists).sort((a, b) => (lists[b].updatedAt || 0) - (lists[a].updatedAt || 0));
+    for (const key of keys.slice(MAX_CHECKLISTS)) delete lists[key];
+    try {
+      await chrome.storage.local.set({ [CHECKLISTS_KEY]: lists });
+    } catch (error) {
+      debug('Could not save checklists', error);
+    }
+  }, 200);
+}
+
+// Checklists belong to a pair of origins, in either order (swapping sides
+// keeps the list). The pinned origins are used once sync was started.
+function checklistKeyFor(group) {
+  if (!group) return null;
+  const left = group.pinnedLeftOrigin || group.leftOrigin;
+  const right = group.pinnedRightOrigin || group.rightOrigin;
+  if (!left || !right) return null;
+  return [left, right].sort().join('|');
+}
+
+function checklistFor(group, create = false) {
+  const key = checklistKeyFor(group);
+  if (!key || !checklistsCache) return null;
+  if (!checklistsCache[key] && create) checklistsCache[key] = { items: [], index: -1, updatedAt: Date.now() };
+  return checklistsCache[key] || null;
+}
+
+function checklistSummary(group) {
+  const list = checklistFor(group);
+  if (!list || !list.items.length) return null;
+  const current = list.items[list.index] || null;
+  return {
+    count: list.items.length,
+    index: list.index,
+    done: list.items.filter((item) => item.status).length,
+    path: current ? current.path : null,
+    status: current ? current.status : null,
+    canNavigate: Boolean(group.originsPinned && group.pinnedLeftOrigin && group.pinnedRightOrigin)
+  };
+}
+
+// Accepts a path ("/pricing/?a=1#x") or a full http(s) URL (only its path,
+// query and hash are kept). Returns null for anything else.
+function normalizeChecklistPath(raw) {
+  let text = String(raw || '').trim();
+  if (!text || text.length > MAX_PATH_LENGTH) return null;
+  try {
+    if (/^https?:\/\//i.test(text)) {
+      const url = new URL(text);
+      text = `${url.pathname}${url.search}${url.hash}`;
+    } else if (/^[a-z][a-z0-9+.-]*:/i.test(text)) {
+      return null;
+    }
+    if (!text.startsWith('/')) text = `/${text}`;
+    if (text.startsWith('//')) text = `/${text.replace(/^\/+/, '')}`;
+    const url = new URL(text, 'https://checklist.invalid');
+    if (url.origin !== 'https://checklist.invalid') return null;
+    return `${url.pathname}${url.search}${url.hash}`.slice(0, MAX_PATH_LENGTH);
+  } catch (_error) {
+    return null;
+  }
+}
+
+function addChecklistPaths(list, paths) {
+  const existing = new Set(list.items.map((item) => item.path));
+  let added = 0;
+  for (const raw of paths) {
+    if (list.items.length >= MAX_CHECKLIST_ITEMS) break;
+    const path = normalizeChecklistPath(raw);
+    if (!path || existing.has(path)) continue;
+    existing.add(path);
+    list.items.push({ path, status: null, note: '' });
+    added += 1;
+  }
+  list.updatedAt = Date.now();
+  return added;
+}
+
+function pathUrlOn(origin, path) {
+  const normalized = normalizeChecklistPath(path);
+  if (!normalized || !origin) return null;
+  return buildMirroredUrl(new URL(normalized, 'https://checklist.invalid').href, origin);
+}
+
+// Opens checklist item `index` in both panes, each on its pinned origin.
+async function goToChecklistItem(group, index) {
+  const list = checklistFor(group);
+  if (!list || index < 0 || index >= list.items.length) return { ok: false, reason: 'no-item' };
+  if (!group.originsPinned || !group.pinnedLeftOrigin || !group.pinnedRightOrigin) return { ok: false, reason: 'not-pinned' };
+
+  const path = list.items[index].path;
+  const leftUrl = pathUrlOn(group.pinnedLeftOrigin, path);
+  const rightUrl = pathUrlOn(group.pinnedRightOrigin, path);
+  if (!leftUrl || !rightUrl) return { ok: false, reason: 'bad-path' };
+
+  list.index = index;
+  list.updatedAt = Date.now();
+  scheduleSaveChecklists();
+
+  // Both panes are sent on purpose: lock both so navigation sync does not
+  // mirror either load to the other side again.
+  const expiresAt = Date.now() + NAVIGATION_LOCK_MS * 2;
+  group.navigationLocks = group.navigationLocks || {};
+  group.navigationLocks[String(group.leftTabId)] = { url: leftUrl, expiresAt };
+  group.navigationLocks[String(group.rightTabId)] = { url: rightUrl, expiresAt };
+  await saveStateNow();
+
+  try {
+    await Promise.all([
+      chrome.tabs.update(group.leftTabId, { url: leftUrl }),
+      chrome.tabs.update(group.rightTabId, { url: rightUrl })
+    ]);
+  } catch (error) {
+    debug('checklist navigation failed', error?.message || error);
+    return { ok: false, reason: 'navigation' };
+  }
+  await sendGroupState(group);
+  return { ok: true };
+}
+
+async function activeGroup() {
+  const activeTab = await getActiveTab();
+  if (!activeTab?.id || typeof activeTab.windowId !== 'number' || !isNormalHttpUrl(activeTab.url)) return { activeTab, group: null };
+  await scanWindow(activeTab.windowId);
+  return { activeTab, group: await getGroupForTab(activeTab.id, activeTab.windowId) };
+}
+
+async function checklistResponse(group, extra = {}) {
+  await getChecklists();
+  const list = group ? checklistFor(group) : null;
+  const key = checklistKeyFor(group);
+  return {
+    ok: true,
+    available: Boolean(group && key),
+    canNavigate: Boolean(group?.originsPinned && group.pinnedLeftOrigin && group.pinnedRightOrigin),
+    leftOrigin: group ? (group.pinnedLeftOrigin || group.leftOrigin || null) : null,
+    rightOrigin: group ? (group.pinnedRightOrigin || group.rightOrigin || null) : null,
+    items: list ? list.items : [],
+    index: list ? list.index : -1,
+    ...extra
+  };
+}
+
+async function handlePopupChecklistMessage(message) {
+  await getChecklists();
+  const { activeTab, group } = await activeGroup();
+  if (!group) return checklistResponse(null);
+
+  if (message.type === MSG.POPUP_CHECKLIST_GET) return checklistResponse(group);
+
+  if (message.type === MSG.POPUP_CHECKLIST_ADD || message.type === MSG.POPUP_CHECKLIST_ADD_CURRENT) {
+    const list = checklistFor(group, true);
+    if (!list) return checklistResponse(group);
+    const paths = message.type === MSG.POPUP_CHECKLIST_ADD
+      ? String(message.text || '').slice(0, 200000).split(/[\r\n]+/).slice(0, MAX_CHECKLIST_ITEMS)
+      : [activeTab?.url];
+    const added = addChecklistPaths(list, paths);
+    scheduleSaveChecklists();
+    await sendGroupState(group);
+    return checklistResponse(group, { added });
+  }
+
+  const list = checklistFor(group);
+  if (!list) return checklistResponse(group);
+  const index = Number(message.index);
+
+  if (message.type === MSG.POPUP_CHECKLIST_UPDATE && Number.isInteger(index) && list.items[index]) {
+    const item = list.items[index];
+    if (message.status === null || CHECK_STATUSES.has(message.status)) item.status = message.status;
+    if (typeof message.note === 'string') item.note = message.note.slice(0, MAX_NOTE_LENGTH);
+    list.updatedAt = Date.now();
+    scheduleSaveChecklists();
+    await sendGroupState(group);
+  } else if (message.type === MSG.POPUP_CHECKLIST_REMOVE && Number.isInteger(index) && list.items[index]) {
+    list.items.splice(index, 1);
+    if (list.index >= list.items.length || index < list.index) list.index = Math.max(-1, list.index - 1);
+    list.updatedAt = Date.now();
+    scheduleSaveChecklists();
+    await sendGroupState(group);
+  } else if (message.type === MSG.POPUP_CHECKLIST_CLEAR) {
+    delete checklistsCache[checklistKeyFor(group)];
+    scheduleSaveChecklists();
+    await sendGroupState(group);
+  } else if (message.type === MSG.POPUP_CHECKLIST_GO) {
+    const target = Number.isInteger(index) ? index : list.index + (Number(message.step) < 0 ? -1 : 1);
+    const result = await goToChecklistItem(group, Math.max(0, Math.min(list.items.length - 1, target)));
+    return checklistResponse(group, { navigation: result });
+  }
+  return checklistResponse(group);
+}
+
+// On-page panel: previous/next and marking the current page.
+async function handleChecklistCommand(tabId, windowId, command, message) {
+  await getChecklists();
+  await scanWindow(windowId);
+  const group = await getGroupForTab(tabId, windowId);
+  const list = group ? checklistFor(group) : null;
+  if (!list || !list.items.length) return;
+  if (command === CMD.CHECKLIST_GO) {
+    const target = list.index + (Number(message.step) < 0 ? -1 : 1);
+    if (target < 0 || target >= list.items.length) return;
+    await goToChecklistItem(group, target);
+    return;
+  }
+  if (command === CMD.CHECKLIST_MARK && list.items[list.index]) {
+    const status = message.status;
+    if (status !== null && !CHECK_STATUSES.has(status)) return;
+    const item = list.items[list.index];
+    item.status = item.status === status ? null : status;
+    list.updatedAt = Date.now();
+    scheduleSaveChecklists();
+    await sendGroupState(group);
+  }
 }
 
 // ---- Pane sizes -------------------------------------------------------------
@@ -1976,6 +2261,10 @@ async function handleUiCommand(sender, command, message = {}) {
     case CMD.SET_HOVER_MIRRORING:
       await setGroupBooleanOption(tabId, windowId, 'mirrorHover', Boolean(message.value));
       break;
+    case CMD.CHECKLIST_GO:
+    case CMD.CHECKLIST_MARK:
+      await handleChecklistCommand(tabId, windowId, command, message);
+      break;
     case CMD.SET_SHOW_CURSOR:
       await setGroupBooleanOption(tabId, windowId, 'showCursor', Boolean(message.value));
       break;
@@ -2221,6 +2510,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === MSG.VIEWPORT) {
       await handleViewportMessage(sender, message);
       sendResponse({ ok: true });
+      return;
+    }
+
+    if (message.type.startsWith('SVSS_POPUP_CHECKLIST_')) {
+      sendResponse(await handlePopupChecklistMessage(message));
       return;
     }
 

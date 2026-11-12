@@ -71,7 +71,9 @@
     SET_ALIGN_MODE: 'SET_ALIGN_MODE',
     SET_CONTAINER_SYNC: 'SET_CONTAINER_SYNC',
     SET_ZOOM_SYNC: 'SET_ZOOM_SYNC',
-    SET_INPUT_SYNC: 'SET_INPUT_SYNC'
+    SET_INPUT_SYNC: 'SET_INPUT_SYNC',
+    CHECKLIST_GO: 'CHECKLIST_GO',
+    CHECKLIST_MARK: 'CHECKLIST_MARK'
   });
 
   const HOST_ID = 'svss-root';
@@ -123,6 +125,8 @@
       --idle-bg: #edf1ef;
       --idle-ink: #4f5e57;
       --status-color: #7c8983;
+      --fail-bg: #fdecec;
+      --fail-ink: #b42323;
 
       font-family: var(--font);
       color: var(--ink);
@@ -145,6 +149,8 @@
         --warn-ink: #ffc58f;
         --idle-bg: #1d2825;
         --idle-ink: #a3b3ac;
+        --fail-bg: #3a1d1d;
+        --fail-ink: #ffa8a8;
       }
     }
 
@@ -332,6 +338,29 @@
     }
 
     .svss-help-after { margin: 8px 0 0; }
+
+    .svss-check-line {
+      overflow-wrap: anywhere;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .svss-check-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+
+    .svss-chips {
+      grid-template-columns: repeat(3, 1fr);
+      margin-top: 6px;
+    }
+
+    .svss-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .svss-chip { border-radius: 999px; min-height: 28px; font-size: 12px; padding: 4px 8px; }
+    .svss-chip-ok[aria-pressed="true"] { background: var(--ok-bg); color: var(--ok-ink); border-color: var(--switch-on); }
+    .svss-chip-fail[aria-pressed="true"] { background: var(--fail-bg); color: var(--fail-ink); border-color: var(--fail-ink); }
+    .svss-chip-na[aria-pressed="true"] { background: var(--idle-bg); color: var(--ink); border-color: var(--muted); }
 
     .svss-btn {
       appearance: none;
@@ -597,6 +626,14 @@
     }
   }
 
+  function tWith(key, substitutions, fallback = '') {
+    try {
+      return chrome.i18n.getMessage(key, substitutions) || fallback;
+    } catch (_error) {
+      return fallback;
+    }
+  }
+
   // Status dot colours on the bubble; chosen for 3:1 against the white ring.
   function getStatusColor(colorName) {
     switch (colorName) {
@@ -814,6 +851,42 @@
     return row;
   }
 
+  // Compact checklist: position, previous/next and the result of this page.
+  function createChecklistSection(info) {
+    const section = createSection(t('sectionChecklist', 'Checklist'));
+    const line = document.createElement('p');
+    line.className = 'svss-help svss-check-line';
+    const hasCurrent = info.index >= 0 && info.path;
+    line.textContent = hasCurrent
+      ? `${tWith('checklistPosition', [String(info.index + 1), String(info.count)])} · ${info.path}`
+      : (info.canNavigate ? t('checklistNoCurrent', '') : t('checklistNeedSync', ''));
+    section.appendChild(line);
+
+    const nav = document.createElement('div');
+    nav.className = 'svss-check-row';
+    const prev = createButton(t('btnPrev', 'Previous'), CMD.CHECKLIST_GO, '', () => ({ step: -1 }), { key: 'check-prev' });
+    const next = createButton(t('btnNext', 'Next'), CMD.CHECKLIST_GO, 'svss-btn-primary', () => ({ step: 1 }), { key: 'check-next' });
+    prev.disabled = !info.canNavigate || info.index <= 0;
+    next.disabled = !info.canNavigate || info.index >= info.count - 1;
+    nav.appendChild(prev);
+    nav.appendChild(next);
+    section.appendChild(nav);
+
+    if (hasCurrent) {
+      const chips = document.createElement('div');
+      chips.className = 'svss-check-row svss-chips';
+      chips.setAttribute('role', 'group');
+      chips.setAttribute('aria-label', t('checklistStatusLabel', ''));
+      for (const [status, key] of [['ok', 'statusOk'], ['fail', 'statusFail'], ['na', 'statusNa']]) {
+        const chip = createButton(t(key, status), CMD.CHECKLIST_MARK, `svss-chip svss-chip-${status}`, () => ({ status }), { key: `check-${status}` });
+        chip.setAttribute('aria-pressed', info.status === status ? 'true' : 'false');
+        chips.appendChild(chip);
+      }
+      section.appendChild(chips);
+    }
+    return section;
+  }
+
   // Maps the background state to one of: synced, paused, reloading, error.
   function getPanelStatus() {
     if (uiState.color === 'red') return 'error';
@@ -887,6 +960,9 @@
     syncRow.appendChild(syncButton);
     syncRow.appendChild(createButton(t('btnSyncAll', 'Sync all Split Views'), CMD.SYNC_ALL, 'svss-btn-quiet'));
     panel.appendChild(syncRow);
+
+    const checklistInfo = uiState.checklist;
+    if (checklistInfo && checklistInfo.count > 0) panel.appendChild(createChecklistSection(checklistInfo));
 
     const optionsSection = createSection(t('sectionOptions', 'Options'));
     optionsSection.appendChild(createSelect(t('optAlign', 'Alignment'), uiState.alignMode === 'element' ? 'element' : 'pixel', [
