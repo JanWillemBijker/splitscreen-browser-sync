@@ -4,11 +4,13 @@ const MSG = Object.freeze({
   POPUP_GET_STATUS: 'SVSS_POPUP_GET_STATUS',
   POPUP_SET_ALWAYS_SHOW: 'SVSS_POPUP_SET_ALWAYS_SHOW',
   POPUP_SET_DEFAULTS: 'SVSS_POPUP_SET_DEFAULTS',
-  POPUP_SHOW_BUTTON_CURRENT: 'SVSS_POPUP_SHOW_BUTTON_CURRENT'
+  POPUP_SHOW_BUTTON_CURRENT: 'SVSS_POPUP_SHOW_BUTTON_CURRENT',
+  POPUP_RULER_ADD: 'SVSS_POPUP_RULER_ADD'
 });
 
 const alwaysShow = document.getElementById('alwaysShow');
 const showCurrent = document.getElementById('showCurrent');
+const addRuler = document.getElementById('addRuler');
 const hint = document.getElementById('hint');
 const statusText = document.getElementById('statusText');
 const footerMeta = document.getElementById('footerMeta');
@@ -17,9 +19,9 @@ const footerMeta = document.getElementById('footerMeta');
 // Each entry maps a checkbox element to the settings field that stores it.
 const defaultToggles = [
   { el: document.getElementById('defaultHideWpAdminBar'), key: 'defaultHideWpAdminBar', fallbackOn: true },
-  { el: document.getElementById('defaultSyncNavigation'), key: 'defaultSyncNavigation', fallbackOn: false },
-  { el: document.getElementById('defaultMirrorClicks'), key: 'defaultMirrorClicks', fallbackOn: false },
-  { el: document.getElementById('defaultMirrorHover'), key: 'defaultMirrorHover', fallbackOn: false }
+  { el: document.getElementById('defaultSyncNavigation'), key: 'defaultSyncNavigation', fallbackOn: true },
+  { el: document.getElementById('defaultMirrorClicks'), key: 'defaultMirrorClicks', fallbackOn: true },
+  { el: document.getElementById('defaultMirrorHover'), key: 'defaultMirrorHover', fallbackOn: true }
 ];
 
 async function sendMessage(message) {
@@ -43,6 +45,7 @@ function renderStatus(status) {
   const inSplit = Boolean(status?.isInValidSplitView);
   const buttonShown = Boolean(status?.buttonShownForCurrent);
   showCurrent.disabled = !inSplit;
+  if (addRuler) addRuler.disabled = !inSplit;
   showCurrent.textContent = buttonShown
     ? 'Hide button on current split screen'
     : 'Show button on current split screen';
@@ -93,6 +96,12 @@ showCurrent.addEventListener('click', async () => {
   const status = await sendMessage({ type: MSG.POPUP_SHOW_BUTTON_CURRENT });
   renderStatus(status);
 });
+
+if (addRuler) {
+  addRuler.addEventListener('click', async () => {
+    await sendMessage({ type: MSG.POPUP_RULER_ADD });
+  });
+}
 
 renderFooter();
 refresh();

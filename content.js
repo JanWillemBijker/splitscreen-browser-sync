@@ -22,7 +22,18 @@
     HOVER: 'SVSS_HOVER',
     REMOTE_HOVER: 'SVSS_REMOTE_HOVER',
     HOVER_CLEAR: 'SVSS_HOVER_CLEAR',
-    REMOTE_HOVER_CLEAR: 'SVSS_REMOTE_HOVER_CLEAR'
+    REMOTE_HOVER_CLEAR: 'SVSS_REMOTE_HOVER_CLEAR',
+    RULER_STATE: 'SVSS_RULER_STATE',
+    RULER_MOVE: 'SVSS_RULER_MOVE',
+    REMOTE_RULER_MOVE: 'SVSS_REMOTE_RULER_MOVE',
+    RULER_DELETE: 'SVSS_RULER_DELETE',
+    RULER_UPDATE: 'SVSS_RULER_UPDATE',
+    RULER_SELECT: 'SVSS_RULER_SELECT',
+    REMOTE_RULER_SELECT: 'SVSS_REMOTE_RULER_SELECT',
+    POPUP_RULER_ADD: 'SVSS_POPUP_RULER_ADD',
+    TOAST: 'SVSS_TOAST',
+    FOCUS: 'SVSS_FOCUS',
+    REMOTE_FOCUS: 'SVSS_REMOTE_FOCUS'
   });
 
   const CMD = Object.freeze({
@@ -109,6 +120,18 @@
   let lastReportedUrl = location.href;
   let navigationRafPending = false;
 
+  let rulers = [];
+  let selectedRulerId = null;
+  let peerSelectedRulerId = null;
+  let rulerLayer = null;
+  let rulerPopup = null;
+  let isDraggingRuler = false;
+  let dragRulerId = null;
+  let dragStartClientY = 0;
+  let dragStartRulerY = 0;
+  let rulerDragY = 0;
+  let rulerDragRafPending = false;
+
   let wpAdminObserver = null;
   let wpAdminMutationRaf = false;
   let wpInlineSnapshot = null;
@@ -160,6 +183,31 @@
 
   function normalizeText(value) {
     return String(value || '').replace(/\s+/g, ' ').trim();
+  }
+
+  function showToast(text) {
+    const toast = document.createElement('div');
+    toast.style.cssText = [
+      'position:fixed', 'bottom:80px', 'left:50%',
+      'transform:translateX(-50%)',
+      'z-index:2147483647',
+      'padding:8px 16px',
+      'border-radius:9px',
+      'background:rgba(20,23,28,0.92)',
+      'color:#f2f2f2',
+      'font:12px/1.4 "Roboto Flex",Arial,sans-serif',
+      'box-shadow:0 4px 18px rgba(0,0,0,0.35)',
+      'pointer-events:none',
+      'white-space:nowrap',
+      'opacity:1',
+      'transition:opacity 350ms ease',
+    ].join(';');
+    toast.textContent = text;
+    (document.documentElement || document.body).appendChild(toast);
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      setTimeout(() => { if (toast.parentNode) toast.remove(); }, 380);
+    }, 2600);
   }
 
   function clearCloseTimer() {
@@ -311,8 +359,17 @@
     panel.appendChild(reloadSection);
 
     const offsetSection = createSection('Offset');
-    const offsetRow = document.createElement('div');
-    offsetRow.className = 'svss-offset-row';
+
+    const offsetTitleEl = offsetSection.querySelector('.svss-section-title');
+    if (offsetTitleEl) {
+      offsetTitleEl.style.display = 'flex';
+      offsetTitleEl.style.justifyContent = 'space-between';
+      offsetTitleEl.style.alignItems = 'baseline';
+      const currentLabel = document.createElement('span');
+      currentLabel.textContent = `Current: ${formatSignedPx(uiState.offsetY)}`;
+      currentLabel.style.cssText = 'font-size:9px;font-weight:400;color:#888;text-transform:none;letter-spacing:0;';
+      offsetTitleEl.appendChild(currentLabel);
+    }
 
     const fieldWrap = document.createElement('label');
     fieldWrap.className = 'svss-field svss-offset-field';
@@ -331,14 +388,7 @@
 
     fieldWrap.appendChild(yInput);
     fieldWrap.appendChild(suffix);
-
-    const current = document.createElement('div');
-    current.className = 'svss-current-offset';
-    current.textContent = `Current: ${formatSignedPx(uiState.offsetY)}`;
-
-    offsetRow.appendChild(fieldWrap);
-    offsetRow.appendChild(current);
-    offsetSection.appendChild(offsetRow);
+    offsetSection.appendChild(fieldWrap);
 
     const offsetActions = document.createElement('div');
     offsetActions.className = 'svss-offset-actions';
@@ -357,7 +407,24 @@
 
     const swap = document.createElement('div');
     swap.className = 'svss-secondary-row';
-    swap.appendChild(createButton('Swap left/right', CMD.SWAP_SIDES, 'secondary'));
+    swap.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:6px;';
+
+    const swapBtn = createButton('Swap left/right', CMD.SWAP_SIDES, 'secondary');
+    swapBtn.style.cssText = 'margin-top:0;width:100%;';
+    swap.appendChild(swapBtn);
+
+    const addRulerPanelBtn = document.createElement('button');
+    addRulerPanelBtn.type = 'button';
+    addRulerPanelBtn.className = 'svss-btn secondary';
+    addRulerPanelBtn.style.cssText = 'margin-top:0;white-space:nowrap;';
+    addRulerPanelBtn.textContent = '+ Ruler';
+    addRulerPanelBtn.addEventListener('click', async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      await sendRuntimeMessage({ type: MSG.POPUP_RULER_ADD });
+    });
+    swap.appendChild(addRulerPanelBtn);
+
     optionsSection.appendChild(swap);
     panel.appendChild(optionsSection);
   }
@@ -1265,12 +1332,15 @@
     }
 
     const text = normalizeText(element.innerText || element.textContent || element.value || ariaLabel || '');
-    if (text && text.length <= 80) candidates.push({ type: 'text', tag, value: text, strong: false });
 
     const cssPath = createCssPath(element);
     if (cssPath) candidates.push({ type: 'css', value: cssPath, strong: false });
 
-    return { tag, candidates: candidates.slice(0, 10), text };
+    if (text && text.length <= 80) candidates.push({ type: 'text', tag, value: text, strong: false });
+
+    const textFingerprint = normalizeText(element.textContent || '').slice(0, 60);
+
+    return { tag, candidates: candidates.slice(0, 10), text, textFingerprint };
   }
 
   // Translate a viewport point from the source pane to this pane. X is scaled by
@@ -1355,11 +1425,73 @@
     return null;
   }
 
+  function matchAllElements(candidate) {
+    if (!candidate || typeof candidate !== 'object') return [];
+    if (candidate.type === 'css' && candidate.value) {
+      try {
+        return Array.from(document.querySelectorAll(candidate.value)).filter(isElementVisible);
+      } catch (_error) {
+        return [];
+      }
+    }
+    if (candidate.type === 'hrefPath' && candidate.value) {
+      return Array.from(document.querySelectorAll('a[href]')).filter((link) => {
+        try {
+          const url = new URL(link.getAttribute('href'), location.href);
+          return `${url.pathname}${url.search}${url.hash}` === candidate.value && isElementVisible(link);
+        } catch (_error) {
+          return false;
+        }
+      });
+    }
+    if (candidate.type === 'text' && candidate.value) {
+      const selector = candidate.tag || 'a,button,[role="button"],input[type="button"],input[type="submit"],summary,label';
+      try {
+        return Array.from(document.querySelectorAll(selector)).filter((element) => {
+          const text = normalizeText(element.innerText || element.textContent || element.value || (element.getAttribute && element.getAttribute('aria-label')) || '');
+          return text === candidate.value && isElementVisible(element);
+        });
+      } catch (_error) {
+        return [];
+      }
+    }
+    return [];
+  }
+
+  function pickClosestToPoint(elements, x, y) {
+    if (elements.length === 0) return null;
+    if (elements.length === 1) return elements[0];
+    let best = null;
+    let bestDist = Infinity;
+    for (const el of elements) {
+      const rect = el.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const dist = Math.hypot(cx - x, cy - y);
+      if (dist < bestDist) { bestDist = dist; best = el; }
+    }
+    return best;
+  }
+
+  function closestDescriptorMatch(candidates, strongOnly, x, y) {
+    for (const candidate of candidates) {
+      if (strongOnly && !candidate.strong) continue;
+      if (!strongOnly && candidate.strong) continue;
+      const matches = matchAllElements(candidate);
+      if (matches.length === 0) continue;
+      return pickClosestToPoint(matches, x, y);
+    }
+    return null;
+  }
+
   // Clicks: prefer a strong descriptor match (robust to differing pane widths),
   // then fall back to the element under the mirrored coordinates (handles modal
   // backdrops, overlays and custom widgets), then weak hints.
+  // When both a coordinate match and a weak match exist and are unrelated,
+  // use textFingerprint to pick the one whose content best matches the source.
   function resolveClickTarget(payload) {
     const candidates = Array.isArray(payload?.candidates) ? payload.candidates : [];
+    const textFingerprint = typeof payload?.textFingerprint === 'string' ? payload.textFingerprint : '';
 
     const strong = firstDescriptorMatch(candidates, true);
     if (strong) return strong;
@@ -1367,22 +1499,29 @@
     const coordElement = elementAtMirroredPoint(payload);
     const weak = firstDescriptorMatch(candidates, false);
 
-    if (coordElement) {
-      if (weak && weak !== coordElement && !coordElement.contains(weak) && !weak.contains(coordElement)) {
-        return weak;
+    if (coordElement && weak && weak !== coordElement && !coordElement.contains(weak) && !weak.contains(coordElement)) {
+      if (textFingerprint) {
+        const coordText = normalizeText(coordElement.textContent || '').slice(0, 60);
+        const weakText = normalizeText(weak.textContent || '').slice(0, 60);
+        if (coordText === textFingerprint && weakText !== textFingerprint) return coordElement;
       }
-      return coordElement;
+      return weak;
     }
 
-    return weak;
+    return coordElement || weak;
   }
 
-  // Hover: position is what matters, so the element under the mirrored point wins.
+  // Hover: position first (exact viewport coordinates), then descriptors with
+  // position-aware tiebreaking so duplicate elements (same link in header AND
+  // footer) always resolve to the one closest to where the pointer actually is.
   function resolveHoverTarget(payload) {
     const coordElement = elementAtMirroredPoint(payload);
     if (coordElement) return coordElement;
+
     const candidates = Array.isArray(payload?.candidates) ? payload.candidates : [];
-    return firstDescriptorMatch(candidates, true) || firstDescriptorMatch(candidates, false);
+    const { x, y } = mirroredPointToLocal(payload);
+    return closestDescriptorMatch(candidates, true, x, y)
+        || closestDescriptorMatch(candidates, false, x, y);
   }
 
   function fireSyntheticPointerEvent(type, element, x, y, extra = {}) {
@@ -1436,6 +1575,11 @@
     const x = rect.left + rect.width / 2;
     const y = rect.top + rect.height / 2;
 
+    // If the resolved element is (or contains) a form input, work on the input directly.
+    const formInputEl = (isFormInput(pointElement) ? pointElement : null)
+      || (activatable && isFormInput(activatable) ? activatable : null);
+    const activeEl = formInputEl || activatable;
+
     isApplyingRemoteClick = true;
     remoteClickSuppressUntil = performance.now() + REMOTE_CLICK_SUPPRESS_MS;
 
@@ -1445,17 +1589,30 @@
       fireSyntheticPointerEvent('pointerdown', pointElement, x, y);
       fireSyntheticPointerEvent('mousedown', pointElement, x, y);
 
-      if (activatable && typeof activatable.focus === 'function') {
-        try { activatable.focus({ preventScroll: true }); } catch (_error) {
-          try { activatable.focus(); } catch (_secondError) {}
+      if (activeEl && typeof activeEl.focus === 'function') {
+        try { activeEl.focus({ preventScroll: true }); } catch (_error) {
+          try { activeEl.focus(); } catch (_secondError) {}
         }
       }
 
       fireSyntheticPointerEvent('pointerup', pointElement, x, y);
       fireSyntheticPointerEvent('mouseup', pointElement, x, y);
 
-      if (activatable && typeof activatable.click === 'function') {
-        activatable.click();
+      if (formInputEl) {
+        // For plain text-like inputs, focus is enough — avoid a spurious .click()
+        // that can echo back or confuse framework event handlers.
+        const inputType = (formInputEl.type || '').toLowerCase();
+        const isToggle = inputType === 'checkbox' || inputType === 'radio';
+        const isTextLike = !isToggle && formInputEl.tagName.toLowerCase() !== 'select';
+
+        if (!isTextLike) {
+          formInputEl.click();
+          formInputEl.dispatchEvent(new Event('input', { bubbles: true }));
+          formInputEl.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      } else if (activatable && typeof activatable.click === 'function') {
+        const href = activatable.getAttribute && activatable.getAttribute('href');
+        if (!href || !/^javascript:/i.test(href)) activatable.click();
       } else {
         fireSyntheticPointerEvent('click', pointElement, x, y);
       }
@@ -1475,6 +1632,7 @@
     if (event.button !== undefined && event.button !== 0) return; // primary button only
     if (isApplyingRemoteClick || performance.now() < remoteClickSuppressUntil) return;
     if (isInsideExtensionUi(event)) return;
+    if (isInsideRulerUi(event)) return;
 
     const point = getEventCoordinates(event);
     const target = event.target instanceof Element ? event.target : null;
@@ -1486,6 +1644,291 @@
       timestamp: Date.now()
     });
   }
+
+  function isFormInput(element) {
+    if (!(element instanceof Element)) return false;
+    const tag = element.tagName.toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
+    if (tag === 'div' || tag === 'span') return element.isContentEditable;
+    return false;
+  }
+
+  function handleLocalFocusIn(event) {
+    if (!uiState.mirrorClicks) return;
+    if (!event.isTrusted) return;
+    if (isApplyingRemoteClick || performance.now() < remoteClickSuppressUntil) return;
+    if (isInsideExtensionUi(event)) return;
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target || !isFormInput(target)) return;
+    const descriptor = buildElementDescriptor(target);
+    const point = getEventCoordinates(event);
+    sendRuntimeMessage({ type: MSG.FOCUS, focus: { ...descriptor, ...point } });
+  }
+
+  function applyRemoteFocus(payload) {
+    if (!uiState.mirrorClicks) return;
+    const element = resolveClickTarget(payload);
+    if (!element || !isFormInput(element)) return;
+    try {
+      element.focus({ preventScroll: true });
+    } catch (_error) {
+      try { element.focus(); } catch (_e) {}
+    }
+  }
+
+  // ---- Ruler lines ----------------------------------------------------------
+
+  function ensureRulerLayer() {
+    if (rulerLayer && rulerLayer.isConnected) return rulerLayer;
+    rulerLayer = document.getElementById('svss-ruler-layer');
+    if (!rulerLayer) {
+      rulerLayer = document.createElement('div');
+      rulerLayer.id = 'svss-ruler-layer';
+      rulerLayer.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;pointer-events:none;z-index:2147483640;overflow:visible;';
+      (document.documentElement || document.body).appendChild(rulerLayer);
+    }
+    return rulerLayer;
+  }
+
+  function isInsideRulerUi(event) {
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target) return false;
+    if (rulerLayer && (target === rulerLayer || rulerLayer.contains(target))) return true;
+    if (rulerPopup && (target === rulerPopup || rulerPopup.contains(target))) return true;
+    return false;
+  }
+
+  function rulerPopupTop(y, thickness) {
+    return y < 70 ? y + (thickness || 2) + 10 : y - 70;
+  }
+
+  function updateRulerPosition(id, y) {
+    if (!rulerLayer) return;
+    const el = rulerLayer.querySelector(`[data-svss-ruler-id="${id}"]`);
+    if (el) el.style.top = `${y}px`;
+    if (rulerPopup && rulerPopup.dataset.svssForRuler === id) {
+      const ruler = rulers.find((r) => r.id === id);
+      rulerPopup.style.top = `${rulerPopupTop(y, ruler ? ruler.thickness : 2)}px`;
+    }
+  }
+
+  function hideRulerPopup() {
+    if (rulerPopup) {
+      rulerPopup.remove();
+      rulerPopup = null;
+    }
+  }
+
+  function showRulerPopup(ruler) {
+    hideRulerPopup();
+    const popupY = rulerPopupTop(ruler.y, ruler.thickness);
+
+    rulerPopup = document.createElement('div');
+    rulerPopup.id = 'svss-ruler-popup';
+    rulerPopup.dataset.svssForRuler = ruler.id;
+    rulerPopup.style.cssText = [
+      'position:fixed', 'left:12px', `top:${popupY}px`,
+      'z-index:2147483641', 'display:flex', 'align-items:center', 'gap:8px',
+      'padding:5px 10px', 'border-radius:8px',
+      'border:1px solid rgba(60,222,149,0.3)',
+      'background:rgba(20,23,28,0.95)', 'color:#f2f2f2',
+      'font:11px/1.35 "Roboto Flex",Arial,sans-serif',
+      'box-shadow:0 4px 16px rgba(0,0,0,0.4)',
+      'pointer-events:auto', 'user-select:none', 'white-space:nowrap'
+    ].join(';');
+
+    const label = document.createElement('span');
+    label.textContent = 'Thickness:';
+    label.style.color = '#aaa';
+
+    const thicknessInput = document.createElement('input');
+    thicknessInput.type = 'number';
+    thicknessInput.min = '1';
+    thicknessInput.max = '20';
+    thicknessInput.value = String(ruler.thickness);
+    thicknessInput.style.cssText = 'width:44px;height:22px;padding:0 4px;border:1px solid rgba(255,255,255,0.15);border-radius:5px;background:rgba(255,255,255,0.08);color:#f2f2f2;font:11px/1 inherit;text-align:center;outline:none;';
+    thicknessInput.addEventListener('change', () => {
+      const t = Math.max(1, Math.min(20, parseInt(thicknessInput.value, 10) || 1));
+      thicknessInput.value = String(t);
+      sendRuntimeMessage({ type: MSG.RULER_UPDATE, id: ruler.id, thickness: t });
+    });
+    thicknessInput.addEventListener('mousedown', (e) => e.stopPropagation());
+    thicknessInput.addEventListener('click', (e) => e.stopPropagation());
+    thicknessInput.addEventListener('keydown', (e) => e.stopPropagation());
+
+    const pxLabel = document.createElement('span');
+    pxLabel.textContent = 'px';
+    pxLabel.style.color = '#aaa';
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.textContent = 'Delete';
+    deleteBtn.style.cssText = 'padding:2px 8px;border:1px solid rgba(255,80,80,0.4);border-radius:5px;background:rgba(255,80,80,0.1);color:#ff6b6b;cursor:pointer;font:inherit;font-size:11px;line-height:1.4;';
+    deleteBtn.addEventListener('mousedown', (e) => e.stopPropagation());
+    deleteBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = ruler.id;
+      deselectRuler();
+      sendRuntimeMessage({ type: MSG.RULER_DELETE, id });
+    });
+
+    rulerPopup.appendChild(label);
+    rulerPopup.appendChild(thicknessInput);
+    rulerPopup.appendChild(pxLabel);
+    rulerPopup.appendChild(deleteBtn);
+    (document.documentElement || document.body).appendChild(rulerPopup);
+  }
+
+  function applyRulerColors() {
+    if (!rulerLayer) return;
+    for (const el of rulerLayer.querySelectorAll('.svss-ruler')) {
+      const rid = el.dataset.svssRulerId;
+      el.style.background = (rid === selectedRulerId || rid === peerSelectedRulerId)
+        ? 'rgba(60,190,222,0.9)'
+        : 'rgba(60,222,149,0.85)';
+    }
+  }
+
+  function deselectRuler() {
+    selectedRulerId = null;
+    applyRulerColors();
+    hideRulerPopup();
+    sendRuntimeMessage({ type: MSG.RULER_SELECT, id: null });
+  }
+
+  function selectRuler(id) {
+    selectedRulerId = id;
+    applyRulerColors();
+    const ruler = rulers.find((r) => r.id === id);
+    if (ruler) showRulerPopup(ruler);
+    sendRuntimeMessage({ type: MSG.RULER_SELECT, id });
+  }
+
+  function createRulerEl(ruler) {
+    const el = document.createElement('div');
+    el.className = 'svss-ruler';
+    el.dataset.svssRulerId = ruler.id;
+    el.style.cssText = [
+      'position:fixed', 'left:0', 'width:100vw',
+      `top:${ruler.y}px`, `height:${ruler.thickness}px`,
+      'background:rgba(60,222,149,0.85)',
+      'cursor:ns-resize', 'pointer-events:auto',
+      'box-sizing:border-box', 'user-select:none',
+      'transition:background 80ms ease'
+    ].join(';');
+
+    el.addEventListener('mousedown', (event) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      selectRuler(ruler.id);
+      isDraggingRuler = true;
+      dragRulerId = ruler.id;
+      dragStartClientY = event.clientY;
+      const current = rulers.find((r) => r.id === ruler.id);
+      dragStartRulerY = current ? current.y : ruler.y;
+      rulerDragY = dragStartRulerY;
+    }, true);
+
+    return el;
+  }
+
+  function renderRulers() {
+    if (!rulers.length) {
+      if (rulerLayer) rulerLayer.textContent = '';
+      if (selectedRulerId) deselectRuler();
+      peerSelectedRulerId = null;
+      return;
+    }
+
+    const layer = ensureRulerLayer();
+    const renderedIds = new Set();
+
+    for (const ruler of rulers) {
+      let el = layer.querySelector(`[data-svss-ruler-id="${ruler.id}"]`);
+      if (el) {
+        el.style.top = `${ruler.y}px`;
+        el.style.height = `${ruler.thickness}px`;
+      } else {
+        el = createRulerEl(ruler);
+        layer.appendChild(el);
+      }
+      renderedIds.add(ruler.id);
+    }
+
+    applyRulerColors();
+
+    for (const el of Array.from(layer.querySelectorAll('.svss-ruler'))) {
+      if (!renderedIds.has(el.dataset.svssRulerId)) el.remove();
+    }
+
+    if (selectedRulerId && !renderedIds.has(selectedRulerId)) {
+      selectedRulerId = null;
+      hideRulerPopup();
+    }
+
+    if (selectedRulerId && rulerPopup) {
+      const ruler = rulers.find((r) => r.id === selectedRulerId);
+      if (ruler) {
+        rulerPopup.style.top = `${rulerPopupTop(ruler.y, ruler.thickness)}px`;
+        const inp = rulerPopup.querySelector('input[type="number"]');
+        if (inp && document.activeElement !== inp) inp.value = String(ruler.thickness);
+      }
+    }
+  }
+
+  function flushRulerDrag() {
+    rulerDragRafPending = false;
+    if (!isDraggingRuler || !dragRulerId) return;
+    const ruler = rulers.find((r) => r.id === dragRulerId);
+    if (ruler) {
+      ruler.y = rulerDragY;
+      updateRulerPosition(dragRulerId, rulerDragY);
+    }
+    sendRuntimeMessage({ type: MSG.RULER_MOVE, id: dragRulerId, y: rulerDragY });
+  }
+
+  function handleRulerMouseMove(event) {
+    if (!isDraggingRuler) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const delta = event.clientY - dragStartClientY;
+    rulerDragY = Math.max(0, dragStartRulerY + delta);
+    if (!rulerDragRafPending) {
+      rulerDragRafPending = true;
+      requestAnimationFrame(flushRulerDrag);
+    }
+  }
+
+  function handleRulerMouseUp(event) {
+    if (!isDraggingRuler) return;
+    event.stopPropagation();
+    isDraggingRuler = false;
+    const id = dragRulerId;
+    const y = rulerDragY;
+    dragRulerId = null;
+    const ruler = rulers.find((r) => r.id === id);
+    if (ruler) {
+      ruler.y = y;
+      updateRulerPosition(id, y);
+    }
+    sendRuntimeMessage({ type: MSG.RULER_MOVE, id, y });
+  }
+
+  function handleRulerKeyDown(event) {
+    if (!selectedRulerId) return;
+    if (event.key !== 'Backspace' && event.key !== 'Delete') return;
+    const active = document.activeElement;
+    if (active && active !== document.body && active.matches('input,textarea,select,[contenteditable="true"]')) return;
+    event.preventDefault();
+    const id = selectedRulerId;
+    deselectRuler();
+    sendRuntimeMessage({ type: MSG.RULER_DELETE, id });
+  }
+
+  window.addEventListener('mousemove', handleRulerMouseMove, true);
+  window.addEventListener('mouseup', handleRulerMouseUp, true);
+  document.addEventListener('keydown', handleRulerKeyDown, true);
 
   // ---- Hover mirroring -----------------------------------------------------
 
@@ -1717,6 +2160,7 @@
       sendHoverClear();
       return;
     }
+    if (isInsideRulerUi(event)) return;
 
     const element = event.target instanceof Element ? event.target : null;
     if (!element) return;
@@ -1773,6 +2217,10 @@
 
     if (message.type === MSG.STATE) {
       uiState = { ...uiState, ...(message.state || {}) };
+      if (Array.isArray(message.state?.rulers)) {
+        rulers = message.state.rulers;
+        renderRulers();
+      }
       updateUi();
       sendResponse({ ok: true });
       return false;
@@ -1780,6 +2228,8 @@
 
     if (message.type === MSG.HIDE_FLOATING_UI) {
       uiState = { ...uiState, show: false, enabled: false, wpAdminBarHidden: false, mirrorClicks: false, mirrorHover: false };
+      rulers = [];
+      renderRulers();
       updateUi();
       sendResponse({ ok: true });
       return false;
@@ -1814,19 +2264,59 @@
       return false;
     }
 
+    if (message.type === MSG.RULER_STATE) {
+      rulers = Array.isArray(message.rulers) ? message.rulers : [];
+      renderRulers();
+      sendResponse({ ok: true });
+      return false;
+    }
+
+    if (message.type === MSG.REMOTE_RULER_MOVE) {
+      const ruler = rulers.find((r) => r.id === message.id);
+      if (ruler) {
+        ruler.y = Number(message.y) || 0;
+        updateRulerPosition(message.id, ruler.y);
+      }
+      sendResponse({ ok: true });
+      return false;
+    }
+
+    if (message.type === MSG.REMOTE_RULER_SELECT) {
+      peerSelectedRulerId = message.id || null;
+      applyRulerColors();
+      sendResponse({ ok: true });
+      return false;
+    }
+
+    if (message.type === MSG.REMOTE_FOCUS) {
+      applyRemoteFocus(message.focus);
+      sendResponse({ ok: true });
+      return false;
+    }
+
+    if (message.type === MSG.TOAST) {
+      showToast(message.text || '');
+      sendResponse({ ok: true });
+      return false;
+    }
+
     sendResponse({ ok: false });
     return false;
   });
 
   document.addEventListener('pointerdown', (event) => {
-    if (!panelOpen || !host) return;
-    if (isInsideExtensionUi(event)) return;
-    panelOpen = false;
-    updatePanelOpenState();
+    if (panelOpen && host && !isInsideExtensionUi(event)) {
+      panelOpen = false;
+      updatePanelOpenState();
+    }
+    if (selectedRulerId && !isInsideRulerUi(event) && !isDraggingRuler) {
+      deselectRuler();
+    }
   }, true);
 
   window.addEventListener('scroll', handleLocalScroll, { passive: true });
   document.addEventListener('click', handleLocalClick, true);
+  document.addEventListener('focusin', handleLocalFocusIn, true);
   document.addEventListener('pointermove', handleLocalPointerMove, true);
   document.addEventListener('pointerleave', sendHoverClear, true);
   window.addEventListener('blur', sendHoverClear, true);

@@ -5,9 +5,9 @@ const SESSION_KEY = 'splitViewScrollSyncState';
 const LOCAL_SETTINGS_KEY = 'splitViewScrollSyncSettings';
 const SPLIT_NONE = chrome.tabs.SPLIT_VIEW_ID_NONE ?? -1;
 const DEFAULT_HIDE_WP_ADMIN_BAR = true;
-const DEFAULT_SYNC_NAVIGATION = false;
-const DEFAULT_MIRROR_CLICKS = false;
-const DEFAULT_MIRROR_HOVER = false;
+const DEFAULT_SYNC_NAVIGATION = true;
+const DEFAULT_MIRROR_CLICKS = true;
+const DEFAULT_MIRROR_HOVER = true;
 const DEFAULT_ALWAYS_SHOW_BUTTON = true;
 const SAVE_DEBOUNCE_MS = 150;
 const NAVIGATION_LOCK_MS = 1500;
@@ -32,7 +32,18 @@ const MSG = Object.freeze({
   POPUP_GET_STATUS: 'SVSS_POPUP_GET_STATUS',
   POPUP_SET_ALWAYS_SHOW: 'SVSS_POPUP_SET_ALWAYS_SHOW',
   POPUP_SET_DEFAULTS: 'SVSS_POPUP_SET_DEFAULTS',
-  POPUP_SHOW_BUTTON_CURRENT: 'SVSS_POPUP_SHOW_BUTTON_CURRENT'
+  POPUP_SHOW_BUTTON_CURRENT: 'SVSS_POPUP_SHOW_BUTTON_CURRENT',
+  RULER_STATE: 'SVSS_RULER_STATE',
+  RULER_MOVE: 'SVSS_RULER_MOVE',
+  REMOTE_RULER_MOVE: 'SVSS_REMOTE_RULER_MOVE',
+  RULER_DELETE: 'SVSS_RULER_DELETE',
+  RULER_UPDATE: 'SVSS_RULER_UPDATE',
+  RULER_SELECT: 'SVSS_RULER_SELECT',
+  REMOTE_RULER_SELECT: 'SVSS_REMOTE_RULER_SELECT',
+  POPUP_RULER_ADD: 'SVSS_POPUP_RULER_ADD',
+  TOAST: 'SVSS_TOAST',
+  FOCUS: 'SVSS_FOCUS',
+  REMOTE_FOCUS: 'SVSS_REMOTE_FOCUS'
 });
 
 const CMD = Object.freeze({
@@ -360,6 +371,7 @@ function buildUiStateForTab(group, tabId, show = true) {
     mirrorClicks: Boolean(group.mirrorClicks),
     mirrorHover: Boolean(group.mirrorHover),
     wpAdminBarHidden: enabled && Boolean(group.hideWpAdminBar),
+    rulers: Array.isArray(group.rulers) ? group.rulers : [],
     color,
     statusText,
     reloading
@@ -417,6 +429,7 @@ function getDefaultsFromExistingGroup(existing, defaults) {
     clickLocks: {},
     leftOrigin: null,
     rightOrigin: null,
+    rulers: [],
     ...(existing || {})
   };
 }
@@ -493,6 +506,7 @@ async function scanWindow(windowId = null) {
       clickLocks: existing.clickLocks || {},
       leftOrigin: getOrigin(leftTab?.url) || existing.leftOrigin || null,
       rightOrigin: getOrigin(rightTab?.url) || existing.rightOrigin || null,
+      rulers: Array.isArray(existing.rulers) ? existing.rulers : [],
       error: null,
       updatedAt: Date.now()
     };
@@ -618,8 +632,21 @@ async function alignTabToPeer(group, targetTabId) {
 
 async function enableCurrentSplitView(tabId, windowId) {
   await scanWindow(windowId);
-  const group = await getGroupForTab(tabId, windowId);
-  if (!group) return;
+  let group = await getGroupForTab(tabId, windowId);
+
+  if (!group) {
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    await scanWindow(windowId);
+    group = await getGroupForTab(tabId, windowId);
+  }
+
+  if (!group) {
+    await safeSendMessage(tabId, {
+      type: MSG.TOAST,
+      text: 'No split view pair detected — try again in a moment.'
+    });
+    return;
+  }
 
   group.enabled = true;
   group.error = null;
@@ -629,6 +656,15 @@ async function enableCurrentSplitView(tabId, windowId) {
   await sendGroupState(group);
   await alignPeerToSource(group, tabId);
   await sendGroupState(group);
+
+  // Re-send state after a short delay in case the peer tab's content script
+  // wasn't ready to receive the first send (e.g. on first split view setup).
+  const groupKey = group.groupKey;
+  setTimeout(async () => {
+    const state = await getState();
+    const g = state.groups[groupKey];
+    if (g && g.enabled) await sendGroupState(g);
+  }, 700);
 }
 
 async function enableAllSplitViewsInCurrentWindow() {
@@ -819,7 +855,7 @@ async function handleNavigationFromTab(tabId, windowId, sourceUrl) {
   if (side === 'left') group.leftOrigin = getOrigin(sourceUrl) || group.leftOrigin;
   if (side === 'right') group.rightOrigin = getOrigin(sourceUrl) || group.rightOrigin;
 
-  if (!group.syncNavigation) {
+  if (!group.enabled || !group.syncNavigation) {
     scheduleSaveState();
     await sendGroupState(group, tabId);
     return;
@@ -865,7 +901,7 @@ async function handleClickMessage(sender, message) {
   if (typeof tabId !== 'number' || typeof windowId !== 'number') return;
 
   const group = await getGroupForTab(tabId, windowId);
-  if (!group || !group.mirrorClicks) return;
+  if (!group || !group.enabled || !group.mirrorClicks) return;
 
   const targetTabId = getPeerTabId(group, tabId);
   if (!targetTabId) return;
@@ -882,13 +918,33 @@ async function handleClickMessage(sender, message) {
   });
 }
 
+async function handleFocusMessage(sender, message) {
+  const tabId = sender.tab?.id;
+  const windowId = sender.tab?.windowId;
+  if (typeof tabId !== 'number' || typeof windowId !== 'number') return;
+
+  const group = await getGroupForTab(tabId, windowId);
+  if (!group || !group.enabled || !group.mirrorClicks) return;
+
+  const targetTabId = getPeerTabId(group, tabId);
+  if (!targetTabId) return;
+
+  const ok = await ensureContentScript(targetTabId);
+  if (!ok) return;
+
+  await safeSendMessage(targetTabId, {
+    type: MSG.REMOTE_FOCUS,
+    focus: message.focus || {}
+  });
+}
+
 async function handleHoverMessage(sender, message) {
   const tabId = sender.tab?.id;
   const windowId = sender.tab?.windowId;
   if (typeof tabId !== 'number' || typeof windowId !== 'number') return;
 
   const group = await getGroupForTab(tabId, windowId);
-  if (!group || !group.mirrorHover) return;
+  if (!group || !group.enabled || !group.mirrorHover) return;
 
   const targetTabId = getPeerTabId(group, tabId);
   if (!targetTabId) return;
@@ -911,7 +967,7 @@ async function handleHoverClearMessage(sender) {
   if (typeof tabId !== 'number' || typeof windowId !== 'number') return;
 
   const group = await getGroupForTab(tabId, windowId);
-  if (!group || !group.mirrorHover) return;
+  if (!group || !group.enabled || !group.mirrorHover) return;
 
   const targetTabId = getPeerTabId(group, tabId);
   if (!targetTabId) return;
@@ -1119,6 +1175,85 @@ async function toggleButtonForCurrentSplit() {
   return getPopupStatus();
 }
 
+function generateRulerId() {
+  return 'r-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
+}
+
+async function sendRulerState(group, targetTabId = null) {
+  const tabIds = targetTabId ? [targetTabId] : groupTabIds(group);
+  const rulers = Array.isArray(group.rulers) ? group.rulers : [];
+  for (const tabId of tabIds) {
+    await safeSendMessage(tabId, { type: MSG.RULER_STATE, rulers });
+  }
+}
+
+async function handlePopupRulerAdd() {
+  const activeTab = await getActiveTab();
+  if (!activeTab?.id || typeof activeTab.windowId !== 'number') return;
+
+  await scanWindow(activeTab.windowId);
+  const group = await getGroupForTab(activeTab.id, activeTab.windowId);
+  if (!group) return;
+
+  group.rulers = Array.isArray(group.rulers) ? group.rulers : [];
+  group.rulers.push({ id: generateRulerId(), y: 300, thickness: 2 });
+  scheduleSaveState();
+  await sendRulerState(group);
+}
+
+async function handleRulerMoveMessage(sender, message) {
+  const tabId = sender.tab?.id;
+  const windowId = sender.tab?.windowId;
+  if (typeof tabId !== 'number' || typeof windowId !== 'number') return;
+
+  const group = await getGroupForTab(tabId, windowId);
+  if (!group) return;
+
+  const ruler = Array.isArray(group.rulers) ? group.rulers.find((r) => r.id === message.id) : null;
+  if (ruler) {
+    ruler.y = Number(message.y) || 0;
+    scheduleSaveState();
+  }
+
+  const targetTabId = getPeerTabId(group, tabId);
+  if (!targetTabId) return;
+
+  await safeSendMessage(targetTabId, {
+    type: MSG.REMOTE_RULER_MOVE,
+    id: message.id,
+    y: ruler ? ruler.y : Number(message.y) || 0
+  });
+}
+
+async function handleRulerDeleteMessage(sender, message) {
+  const tabId = sender.tab?.id;
+  const windowId = sender.tab?.windowId;
+  if (typeof tabId !== 'number' || typeof windowId !== 'number') return;
+
+  const group = await getGroupForTab(tabId, windowId);
+  if (!group) return;
+
+  group.rulers = Array.isArray(group.rulers) ? group.rulers.filter((r) => r.id !== message.id) : [];
+  scheduleSaveState();
+  await sendRulerState(group);
+}
+
+async function handleRulerUpdateMessage(sender, message) {
+  const tabId = sender.tab?.id;
+  const windowId = sender.tab?.windowId;
+  if (typeof tabId !== 'number' || typeof windowId !== 'number') return;
+
+  const group = await getGroupForTab(tabId, windowId);
+  if (!group) return;
+
+  const ruler = Array.isArray(group.rulers) ? group.rulers.find((r) => r.id === message.id) : null;
+  if (ruler && typeof message.thickness === 'number') {
+    ruler.thickness = Math.max(1, Math.min(20, Math.round(message.thickness)));
+  }
+  scheduleSaveState();
+  await sendRulerState(group);
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
     if (!message || typeof message.type !== 'string') {
@@ -1150,6 +1285,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     if (message.type === MSG.CLICK) {
       await handleClickMessage(sender, message);
+      sendResponse({ ok: true });
+      return;
+    }
+
+    if (message.type === MSG.FOCUS) {
+      await handleFocusMessage(sender, message);
       sendResponse({ ok: true });
       return;
     }
@@ -1207,6 +1348,46 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     if (message.type === MSG.POPUP_SHOW_BUTTON_CURRENT) {
       sendResponse(await toggleButtonForCurrentSplit());
+      return;
+    }
+
+    if (message.type === MSG.POPUP_RULER_ADD) {
+      await handlePopupRulerAdd();
+      sendResponse({ ok: true });
+      return;
+    }
+
+    if (message.type === MSG.RULER_MOVE) {
+      await handleRulerMoveMessage(sender, message);
+      sendResponse({ ok: true });
+      return;
+    }
+
+    if (message.type === MSG.RULER_DELETE) {
+      await handleRulerDeleteMessage(sender, message);
+      sendResponse({ ok: true });
+      return;
+    }
+
+    if (message.type === MSG.RULER_UPDATE) {
+      await handleRulerUpdateMessage(sender, message);
+      sendResponse({ ok: true });
+      return;
+    }
+
+    if (message.type === MSG.RULER_SELECT) {
+      const tabId = sender.tab?.id;
+      const windowId = sender.tab?.windowId;
+      if (typeof tabId === 'number' && typeof windowId === 'number') {
+        const group = await getGroupForTab(tabId, windowId);
+        if (group) {
+          const targetTabId = getPeerTabId(group, tabId);
+          if (targetTabId) {
+            await safeSendMessage(targetTabId, { type: MSG.REMOTE_RULER_SELECT, id: message.id ?? null });
+          }
+        }
+      }
+      sendResponse({ ok: true });
       return;
     }
 

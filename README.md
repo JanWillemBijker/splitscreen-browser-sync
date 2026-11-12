@@ -1,6 +1,6 @@
 # SplitScreen Browser Sync
 
-Version: 1.0.0
+Version: 1.1.0
 
 Manifest V3 Chrome Extension for pixel-perfect scroll sync between two tabs in Chrome native Split View.
 
@@ -19,6 +19,28 @@ Manifest V3 Chrome Extension for pixel-perfect scroll sync between two tabs in C
 - Optionally mirrors navigation between live/staging domains while preserving each side's origin.
 - Optionally mirrors interactive clicks between panes, including closing overlays by clicking outside them.
 - Optionally mirrors hover effects (CSS `:hover` styling and JS-driven hover menus) between panes.
+
+## Changes in 1.1.0
+
+### Synchronized ruler lines
+
+- Added horizontal ruler lines that stay in sync between both panes, similar to the Grid Ruler extension.
+- Add a ruler from the toolbar popup (**+ Add ruler**) or from the **+ Ruler** button next to **Swap left/right** in the on-page panel.
+- Drag a ruler up or down; both sides update live.
+- Click a ruler to select it — it turns turquoise and the same highlight appears on the peer side.
+- A settings bar appears when a ruler is selected: adjust the line thickness (1–20 px) or delete it.
+- Press **Backspace** or **Delete** to remove the selected ruler without opening the settings bar.
+- Rulers are stored per Split View group for the current session and survive pane reloads.
+
+### Panel improvements
+
+- The **Offset** section title now shows the current offset value inline (e.g. `Current: +20px`) so the number input takes the full width.
+- **+ Ruler** button added next to **Swap left/right** in the on-page panel.
+
+### Improved click matching
+
+- Click descriptors now include a short text fingerprint of the clicked element's content.
+- When resolving a click on the peer pane, the fingerprint is used as a tie-breaker between coordinate-based and text-based matches, reducing mis-hits on pages with repeating components such as navigation items or cards.
 
 ## Changes in 0.4
 
