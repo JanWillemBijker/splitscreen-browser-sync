@@ -27,8 +27,6 @@ FILES=(
   popup.html
   popup.css
   popup.js
-  _locales/en/messages.json
-  _locales/nl/messages.json
   icons/icon.svg
   icons/icon16.png
   icons/icon24.png
@@ -38,6 +36,15 @@ FILES=(
   icons/icon128.png
   icons/icon256.png
 )
+
+# Every UI language in _locales (en is the default and must exist).
+[[ -f _locales/en/messages.json ]] || { echo "Missing: _locales/en/messages.json" >&2; exit 1; }
+for file in _locales/*/messages.json; do
+  FILES+=("$file")
+done
+
+echo "Checking locales"
+node scripts/check-locales.mjs >/dev/null || { node scripts/check-locales.mjs; exit 1; }
 
 for file in "${FILES[@]}"; do
   [[ -f "$file" ]] || { echo "Missing: $file" >&2; exit 1; }

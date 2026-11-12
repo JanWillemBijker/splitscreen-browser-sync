@@ -1,0 +1,681 @@
+{
+  "extName": {
+    "message": "SplitScreen Browser Sync"
+  },
+  "extDescription": {
+    "message": "Sincronizza scorrimento, clic e hover tra le due schede di una Split View di Chrome. Per confrontare siti live e di staging."
+  },
+  "cmdSyncCurrent": {
+    "message": "Avvia la sincronizzazione della Split View attuale"
+  },
+  "cmdSyncAll": {
+    "message": "Avvia la sincronizzazione di tutte le Split View della finestra"
+  },
+  "cmdStopCurrent": {
+    "message": "Interrompi la sincronizzazione della Split View attuale"
+  },
+  "cmdHardReload": {
+    "message": "Ricarica forzata del riquadro attivo"
+  },
+  "statusSyncedTitle": {
+    "message": "Sincronizzato"
+  },
+  "statusSyncedBody": {
+    "message": "I due riquadri scorrono insieme."
+  },
+  "statusPausedTitle": {
+    "message": "In pausa"
+  },
+  "statusPausedBody": {
+    "message": "Split View trovata. Avvia sync per collegare i riquadri."
+  },
+  "statusReloadingTitle": {
+    "message": "Ricaricamento"
+  },
+  "statusReloadingBody": {
+    "message": "Un riquadro si sta ricaricando. La sincronizzazione riprende appena finisce."
+  },
+  "statusErrorTitle": {
+    "message": "L'altro riquadro non risponde"
+  },
+  "statusErrorBody": {
+    "message": "Ricarica l'altro riquadro e riavvia la sincronizzazione."
+  },
+  "statusNoSplitTitle": {
+    "message": "Nessuna Split View"
+  },
+  "statusNoSplitBody": {
+    "message": "Affianca due pagine web per confrontarle."
+  },
+  "emptyStep1": {
+    "message": "Fai clic destro su una scheda e scegli l'opzione per una nuova visualizzazione divisa."
+  },
+  "emptyStep2": {
+    "message": "Scegli la seconda pagina. Entrambe devono essere normali siti web (http o https)."
+  },
+  "emptyStep3": {
+    "message": "Riapri questo menu e premi Avvia sync."
+  },
+  "statusUnsupportedTitle": {
+    "message": "Questa pagina non si può sincronizzare"
+  },
+  "statusUnsupportedBody": {
+    "message": "Le pagine di Chrome, il Web Store e i file locali sono preclusi alle estensioni. Apri un normale sito web in una Split View."
+  },
+  "metaOffset": {
+    "message": "Scostamento $OFFSET$ px",
+    "placeholders": {
+      "offset": {
+        "content": "$1",
+        "example": "+20"
+      }
+    }
+  },
+  "btnStartSync": {
+    "message": "Avvia sync"
+  },
+  "btnStopSync": {
+    "message": "Ferma sync"
+  },
+  "btnSyncAll": {
+    "message": "Sincronizza tutte le Split View"
+  },
+  "sectionThisSplit": {
+    "message": "Questa Split View"
+  },
+  "sectionThisSplitHelp": {
+    "message": "Le modifiche valgono subito per entrambi i riquadri."
+  },
+  "optNavigation": {
+    "message": "Sincronizza navigazione"
+  },
+  "optNavigationHelp": {
+    "message": "Apre lo stesso percorso dall'altro lato, solo tra i due siti sincronizzati."
+  },
+  "optClicks": {
+    "message": "Replica i clic"
+  },
+  "optClicksHelp": {
+    "message": "Ripete i clic sull'elemento corrispondente. Mai su moduli, pagamenti o eliminazioni."
+  },
+  "optHover": {
+    "message": "Replica effetti hover"
+  },
+  "optHoverHelp": {
+    "message": "Mostra stili e menu hover su entrambi i lati."
+  },
+  "optCursor": {
+    "message": "Mostra cursore del mouse"
+  },
+  "optCursorHelp": {
+    "message": "Mostra un puntatore nell'altro riquadro dove si trova il mouse. Solo visivo, non fa mai clic."
+  },
+  "optWpAdminBar": {
+    "message": "Nascondi barra admin WordPress"
+  },
+  "optWpAdminBarHelp": {
+    "message": "Nasconde la barra durante la sincronizzazione per allineare i layout."
+  },
+  "btnAddRuler": {
+    "message": "Righello"
+  },
+  "btnShowPanel": {
+    "message": "Mostra pulsante su pagina"
+  },
+  "btnHidePanel": {
+    "message": "Nascondi pulsante su pagina"
+  },
+  "sectionDefaults": {
+    "message": "Predefiniti per nuove Split View"
+  },
+  "sectionDefaultsHelp": {
+    "message": "Usati per ogni nuova coppia. Le coppie esistenti mantengono le loro impostazioni."
+  },
+  "sectionButton": {
+    "message": "Pulsante sulla pagina"
+  },
+  "optAlwaysShow": {
+    "message": "Mostra in ogni Split View"
+  },
+  "optAlwaysShowHelp": {
+    "message": "Disattiva per mostrare il pulsante mobile solo quando lo scegli tu."
+  },
+  "footerShortcuts": {
+    "message": "Scorciatoie da tastiera"
+  },
+  "footerMadeBy": {
+    "message": "Creato da"
+  },
+  "panelClose": {
+    "message": "Chiudi"
+  },
+  "bubbleLabel": {
+    "message": "Apri i controlli di SplitScreen Browser Sync"
+  },
+  "pillSynced": {
+    "message": "Sincronizzato"
+  },
+  "pillPaused": {
+    "message": "In pausa"
+  },
+  "pillReloading": {
+    "message": "Ricaricamento"
+  },
+  "pillError": {
+    "message": "Non risponde"
+  },
+  "sectionOptions": {
+    "message": "Opzioni"
+  },
+  "sectionOffset": {
+    "message": "Scostamento"
+  },
+  "offsetHelp": {
+    "message": "Il riquadro destro scorre di questi pixel in più rispetto al sinistro."
+  },
+  "offsetInputLabel": {
+    "message": "Scostamento di scorrimento in pixel"
+  },
+  "btnApply": {
+    "message": "Applica"
+  },
+  "btnReset": {
+    "message": "Reimposta"
+  },
+  "sectionReload": {
+    "message": "Ricarica"
+  },
+  "colLeft": {
+    "message": "Sinistra"
+  },
+  "colRight": {
+    "message": "Destra"
+  },
+  "btnReload": {
+    "message": "Ricarica"
+  },
+  "btnHardReload": {
+    "message": "Ricarica forzata"
+  },
+  "reloadLeftLabel": {
+    "message": "Ricarica riquadro sinistro"
+  },
+  "reloadRightLabel": {
+    "message": "Ricarica riquadro destro"
+  },
+  "hardReloadLeftLabel": {
+    "message": "Ricarica forzata del riquadro sinistro, ignorando la cache"
+  },
+  "hardReloadRightLabel": {
+    "message": "Ricarica forzata del riquadro destro, ignorando la cache"
+  },
+  "btnSwap": {
+    "message": "Inverti lati"
+  },
+  "btnRuler": {
+    "message": "Aggiungi righello"
+  },
+  "rulerThickness": {
+    "message": "Spessore"
+  },
+  "rulerDelete": {
+    "message": "Elimina"
+  },
+  "rulerLabel": {
+    "message": "Linea righello. Trascina per spostarla, premi Canc per rimuoverla."
+  },
+  "toastNoPair": {
+    "message": "Nessuna coppia Split View trovata. Riprova tra poco."
+  },
+  "panelTitle": {
+    "message": "SplitScreen Sync"
+  },
+  "statusOriginPausedTitle": {
+    "message": "In pausa: aperto un altro sito"
+  },
+  "statusOriginPausedBody": {
+    "message": "Un riquadro ha lasciato il sito per cui hai avviato la sincronizzazione. Premi Avvia sync per sincronizzare questi due siti."
+  },
+  "pillOriginPaused": {
+    "message": "In pausa: altro sito"
+  },
+  "toastClickSkipped": {
+    "message": "Clic non replicato (modulo/azione)"
+  },
+  "tabsLabel": {
+    "message": "Sezioni"
+  },
+  "tabSync": {
+    "message": "Sync"
+  },
+  "tabSettings": {
+    "message": "Opzioni"
+  },
+  "needPairHint": {
+    "message": "Apri due pagine web in una Split View per usare questa funzione."
+  },
+  "toastOffsetSet": {
+    "message": "Scostamento $OFFSET$ px",
+    "placeholders": {
+      "offset": {
+        "content": "$1",
+        "example": "+120"
+      }
+    }
+  },
+  "altHint": {
+    "message": "Suggerimento: tieni premuto Alt (Option) mentre scorri per muovere un solo lato; la differenza diventa lo scostamento."
+  },
+  "optAlign": {
+    "message": "Allineamento"
+  },
+  "optAlignHelp": {
+    "message": "Al pixel copia la posizione di scorrimento. Su elemento/contenuto tiene in alto la stessa sezione quando le pagine hanno altezze diverse."
+  },
+  "alignPixel": {
+    "message": "Al pixel"
+  },
+  "alignElement": {
+    "message": "Su elemento/contenuto"
+  },
+  "optContainers": {
+    "message": "Sincronizza aree scorrevoli"
+  },
+  "optContainersHelp": {
+    "message": "Scorre anche l'area scorrevole corrispondente dall'altro lato: pannelli laterali, modali, elenchi."
+  },
+  "optZoom": {
+    "message": "Sincronizza zoom"
+  },
+  "optZoomHelp": {
+    "message": "Lo zoom su un lato (Ctrl/⌘ + o −) porta l'altro lato allo stesso livello."
+  },
+  "optInput": {
+    "message": "Sincronizza digitazione"
+  },
+  "optInputHelp": {
+    "message": "Copia ciò che digiti e selezioni nei campi dei moduli nel campo corrispondente dall'altro lato. L'altro sito riceve quel testo. Mai password, codici, campi di pagamento o file; non invia mai."
+  },
+  "tabCompare": {
+    "message": "Confronta"
+  },
+  "sectionPaneSizes": {
+    "message": "Dimensioni riquadri"
+  },
+  "paneSizesHelp": {
+    "message": "Chrome non ha un'impostazione per il divisore, quindi una preimpostazione ridimensiona la finestra finché il riquadro scelto ha quella larghezza. L'altro cambia di conseguenza."
+  },
+  "paneSizeUnknown": {
+    "message": "sconosciuta"
+  },
+  "presetSideLabel": {
+    "message": "Riquadro da ridimensionare"
+  },
+  "presetGroupLabel": {
+    "message": "Larghezze preimpostate"
+  },
+  "presetReached": {
+    "message": "Il riquadro $SIDE$ ora è largo $WIDTH$ px.",
+    "placeholders": {
+      "side": {
+        "content": "$1",
+        "example": "sinistro"
+      },
+      "width": {
+        "content": "$2",
+        "example": "768"
+      }
+    }
+  },
+  "presetLimited": {
+    "message": "Spazio insufficiente sullo schermo: il riquadro $SIDE$ è largo $WIDTH$ px.",
+    "placeholders": {
+      "side": {
+        "content": "$1",
+        "example": "sinistro"
+      },
+      "width": {
+        "content": "$2",
+        "example": "1180"
+      }
+    }
+  },
+  "presetFailed": {
+    "message": "Impossibile ridimensionare la finestra."
+  },
+  "sideLeftLower": {
+    "message": "sinistro"
+  },
+  "sideRightLower": {
+    "message": "destro"
+  },
+  "tabChecklist": {
+    "message": "Checklist"
+  },
+  "checklistHelp": {
+    "message": "Percorsi da controllare uno per uno su entrambi i siti. Salvati per questa coppia di siti."
+  },
+  "checklistEmpty": {
+    "message": "Ancora nessuna pagina. Incolla percorsi o URL qui sotto, o aggiungi la pagina attuale."
+  },
+  "checklistProgress": {
+    "message": "$DONE$ di $TOTAL$ controllate",
+    "placeholders": {
+      "done": {
+        "content": "$1",
+        "example": "3"
+      },
+      "total": {
+        "content": "$2",
+        "example": "12"
+      }
+    }
+  },
+  "checklistFailCount": {
+    "message": "$COUNT$ errate",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "2"
+      }
+    }
+  },
+  "checklistPosition": {
+    "message": "Pagina $INDEX$ di $TOTAL$",
+    "placeholders": {
+      "index": {
+        "content": "$1",
+        "example": "3"
+      },
+      "total": {
+        "content": "$2",
+        "example": "12"
+      }
+    }
+  },
+  "checklistNoCurrent": {
+    "message": "Premi Avanti per aprire la prima pagina in entrambi i riquadri."
+  },
+  "checklistNeedSync": {
+    "message": "Avvia la sincronizzazione una volta perché entrambi i siti siano noti; poi Indietro/Avanti apre le pagine."
+  },
+  "btnPrev": {
+    "message": "Indietro"
+  },
+  "btnNext": {
+    "message": "Avanti"
+  },
+  "statusOk": {
+    "message": "OK"
+  },
+  "statusFail": {
+    "message": "Errata"
+  },
+  "statusNa": {
+    "message": "N/A"
+  },
+  "statusOpen": {
+    "message": "Da controllare"
+  },
+  "checklistStatusLabel": {
+    "message": "Esito per questa pagina"
+  },
+  "checklistNote": {
+    "message": "Nota"
+  },
+  "checklistNotePlaceholder": {
+    "message": "Cosa c'è di diverso?"
+  },
+  "checklistPastePlaceholder": {
+    "message": "/prezzi/\n/contatti/\nhttps://example.com/chi-siamo/"
+  },
+  "checklistPasteLabel": {
+    "message": "Percorsi o URL, uno per riga"
+  },
+  "btnAddPaths": {
+    "message": "Aggiungi"
+  },
+  "btnAddCurrent": {
+    "message": "Aggiungi pagina attuale"
+  },
+  "btnExportCsv": {
+    "message": "Esporta CSV"
+  },
+  "btnCopyText": {
+    "message": "Copia come testo"
+  },
+  "btnClearList": {
+    "message": "Svuota elenco"
+  },
+  "btnClearConfirm": {
+    "message": "Clic di nuovo per svuotare"
+  },
+  "checklistAdded": {
+    "message": "$COUNT$ aggiunte",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "3"
+      }
+    }
+  },
+  "checklistCopied": {
+    "message": "Copiato negli appunti"
+  },
+  "checklistRemove": {
+    "message": "Rimuovi $PATH$",
+    "placeholders": {
+      "path": {
+        "content": "$1",
+        "example": "/prezzi/"
+      }
+    }
+  },
+  "checklistOpen": {
+    "message": "Apri $PATH$ in entrambi i riquadri",
+    "placeholders": {
+      "path": {
+        "content": "$1",
+        "example": "/prezzi/"
+      }
+    }
+  },
+  "checklistAllPages": {
+    "message": "Tutte le pagine"
+  },
+  "csvHeader": {
+    "message": "#,Percorso,Esito,Nota,URL sinistra,URL destra"
+  },
+  "sectionChecklist": {
+    "message": "Checklist"
+  },
+  "sectionHistory": {
+    "message": "Coppie recenti"
+  },
+  "historyHelp": {
+    "message": "Coppie per cui hai avviato la sincronizzazione. Fai clic su una per riaprire le due pagine affiancate."
+  },
+  "historyEmpty": {
+    "message": "Le coppie compaiono qui dopo che premi Avvia sync."
+  },
+  "historyPin": {
+    "message": "Fissa come preferita"
+  },
+  "historyUnpin": {
+    "message": "Rimuovi dai preferiti"
+  },
+  "historyRename": {
+    "message": "Rinomina"
+  },
+  "historyDelete": {
+    "message": "Rimuovi dalla cronologia"
+  },
+  "historyNameLabel": {
+    "message": "Nome della coppia"
+  },
+  "historyOpenLabel": {
+    "message": "Apri $NAME$ affiancati",
+    "placeholders": {
+      "name": {
+        "content": "$1",
+        "example": "example.com ↔ staging.example.com"
+      }
+    }
+  },
+  "historyReused": {
+    "message": "Caricamento delle due pagine in questa Split View. La sincronizzazione parte quando sono caricate."
+  },
+  "historyCreated": {
+    "message": "Aperta come nuova Split View. La sincronizzazione parte quando entrambe le pagine sono caricate."
+  },
+  "historyManual": {
+    "message": "Le due pagine sono aperte una accanto all'altra. Seleziona entrambe le schede (clic su una, Maiusc+clic sull'altra), fai clic con il tasto destro, scegli l'opzione per la visualizzazione divisa e premi Avvia sync."
+  },
+  "historyFailed": {
+    "message": "Impossibile aprire questa coppia."
+  },
+  "optRememberPairs": {
+    "message": "Ricorda le coppie"
+  },
+  "optRememberPairsHelp": {
+    "message": "Salva siti e percorsi (senza query string) delle coppie che sincronizzi, solo su questo dispositivo."
+  },
+  "btnClearHistory": {
+    "message": "Cancella cronologia (tranne i preferiti)"
+  },
+  "historyCleared": {
+    "message": "Cronologia cancellata."
+  },
+  "btnSave": {
+    "message": "Salva"
+  },
+  "sectionOverlay": {
+    "message": "Overlay"
+  },
+  "overlayHelp": {
+    "message": "Sovrappone un'immagine di un lato all'altro, così le differenze risaltano. L'immagine si aggiorna quando smetti di scorrere."
+  },
+  "overlayPanelHelp": {
+    "message": "Un'immagine dell'altro lato, sopra questo lato."
+  },
+  "overlayPermissionHelp": {
+    "message": "Chrome consente a un'estensione di catturare una scheda solo con l'accesso a tutti i siti, quindi l'overlay lo chiede una volta. L'immagine resta nel browser."
+  },
+  "btnAllowCapture": {
+    "message": "Consenti cattura dei riquadri"
+  },
+  "overlayNeedPermission": {
+    "message": "Prima consenti la cattura dei riquadri: menu della barra → Confronta."
+  },
+  "overlayNeedSync": {
+    "message": "Avvia sync per usare l'overlay."
+  },
+  "overlayShow": {
+    "message": "Mostra overlay"
+  },
+  "overlayShowHere": {
+    "message": "Mostra l'altro lato sopra questo"
+  },
+  "overlayOver": {
+    "message": "Mostra sopra"
+  },
+  "overlayOpacity": {
+    "message": "Opacità"
+  },
+  "overlayDifference": {
+    "message": "Fusione Differenza"
+  },
+  "overlayDifferenceHelp": {
+    "message": "I pixel identici diventano neri; le differenze si illuminano."
+  },
+  "overlaySwipe": {
+    "message": "Divisore scorrevole"
+  },
+  "overlaySwipeHelp": {
+    "message": "Trascina il divisore sulla pagina per confrontare i due lati in un punto."
+  },
+  "overlaySwipeLabel": {
+    "message": "Posizione del divisore"
+  },
+  "overlayRefresh": {
+    "message": "Aggiorna immagine"
+  },
+  "overlayDeclined": {
+    "message": "Senza questa autorizzazione l'overlay non può catturare l'altro riquadro."
+  },
+  "cmdToggleInspect": {
+    "message": "Attiva o disattiva l'ispezione delle differenze CSS"
+  },
+  "sectionInspect": {
+    "message": "Differenze CSS"
+  },
+  "inspectToggle": {
+    "message": "Ispeziona differenze"
+  },
+  "inspectHelp": {
+    "message": "Punta un elemento su un lato: entrambi i lati lo evidenziano e un pannello elenca il CSS diverso (font, dimensione, colore, spaziatura, layout). Clic per bloccare, Esc per uscire."
+  },
+  "inspectNoMatch": {
+    "message": "Nessun elemento corrispondente dall'altro lato."
+  },
+  "inspectSame": {
+    "message": "Nessuna differenza nelle proprietà controllate."
+  },
+  "inspectProperty": {
+    "message": "Proprietà"
+  },
+  "inspectHint": {
+    "message": "Clic per bloccare · Esc per uscire"
+  },
+  "inspectHintFrozen": {
+    "message": "Bloccato · clic per continuare · Esc per uscire"
+  },
+  "inspectNeedSync": {
+    "message": "Avvia sync per ispezionare le differenze."
+  },
+  "badgeSyncedWith": {
+    "message": "Sincronizzato con $HOST$",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "staging.example.com"
+      }
+    }
+  },
+  "badgeReloading": {
+    "message": "Sincronizzato · un riquadro si ricarica"
+  },
+  "suggestTitle": {
+    "message": "Sincronizzare?"
+  },
+  "suggestStart": {
+    "message": "Avvia"
+  },
+  "suggestDismiss": {
+    "message": "Non ora"
+  },
+  "suggestNever": {
+    "message": "Non suggerire più per questa coppia"
+  },
+  "suggestPopupLabel": {
+    "message": "Suggerimento:"
+  },
+  "suggestWhy": {
+    "message": "Sembrano due versioni dello stesso sito."
+  },
+  "sectionSuggest": {
+    "message": "Suggerimenti"
+  },
+  "optSuggest": {
+    "message": "Suggerisci sync"
+  },
+  "optSuggestHelp": {
+    "message": "Propone di avviare la sincronizzazione quando i riquadri sembrano due versioni di un sito (stessa pagina, o live e staging). Non parte mai da sola."
+  },
+  "btnSuggestReset": {
+    "message": "Suggerisci di nuovo le coppie ignorate"
+  },
+  "suggestResetDone": {
+    "message": "Le coppie ignorate verranno suggerite di nuovo."
+  }
+}

@@ -1,0 +1,681 @@
+{
+  "extName": {
+    "message": "SplitScreen Browser Sync"
+  },
+  "extDescription": {
+    "message": "Synchronisez défilement, clics et survol entre les deux onglets d’une Split View de Chrome. Pour comparer site live et staging."
+  },
+  "cmdSyncCurrent": {
+    "message": "Lancer la synchro de la Split View active"
+  },
+  "cmdSyncAll": {
+    "message": "Lancer la synchro de toutes les Split Views de la fenêtre"
+  },
+  "cmdStopCurrent": {
+    "message": "Arrêter la synchro de la Split View active"
+  },
+  "cmdHardReload": {
+    "message": "Forcer l’actualisation du volet actif"
+  },
+  "statusSyncedTitle": {
+    "message": "Synchronisé"
+  },
+  "statusSyncedBody": {
+    "message": "Les deux volets défilent ensemble."
+  },
+  "statusPausedTitle": {
+    "message": "En pause"
+  },
+  "statusPausedBody": {
+    "message": "Split View détectée. Lancez la synchro pour lier les deux volets."
+  },
+  "statusReloadingTitle": {
+    "message": "Actualisation"
+  },
+  "statusReloadingBody": {
+    "message": "Un volet s’actualise. La synchro reprendra ensuite."
+  },
+  "statusErrorTitle": {
+    "message": "L’autre volet ne répond pas"
+  },
+  "statusErrorBody": {
+    "message": "Actualisez l’autre volet, puis relancez la synchro."
+  },
+  "statusNoSplitTitle": {
+    "message": "Pas dans une Split View"
+  },
+  "statusNoSplitBody": {
+    "message": "Placez deux pages web côte à côte pour les comparer."
+  },
+  "emptyStep1": {
+    "message": "Faites un clic droit sur un onglet et choisissez l’option de vue fractionnée."
+  },
+  "emptyStep2": {
+    "message": "Choisissez la seconde page. Les deux doivent être des sites web classiques (http ou https)."
+  },
+  "emptyStep3": {
+    "message": "Rouvrez ce menu et cliquez sur Lancer la synchro."
+  },
+  "statusUnsupportedTitle": {
+    "message": "Cette page ne peut pas être synchronisée"
+  },
+  "statusUnsupportedBody": {
+    "message": "Les pages Chrome, le Web Store et les fichiers locaux sont fermés aux extensions. Ouvrez un site web classique dans une Split View."
+  },
+  "metaOffset": {
+    "message": "Décalage de défilement $OFFSET$ px",
+    "placeholders": {
+      "offset": {
+        "content": "$1",
+        "example": "+20"
+      }
+    }
+  },
+  "btnStartSync": {
+    "message": "Lancer la synchro"
+  },
+  "btnStopSync": {
+    "message": "Arrêter la synchro"
+  },
+  "btnSyncAll": {
+    "message": "Synchroniser toutes les Split Views"
+  },
+  "sectionThisSplit": {
+    "message": "Cette Split View"
+  },
+  "sectionThisSplitHelp": {
+    "message": "Les changements s’appliquent aussitôt aux deux volets."
+  },
+  "optNavigation": {
+    "message": "Synchroniser la navigation"
+  },
+  "optNavigationHelp": {
+    "message": "Ouvre le même chemin de l’autre côté, uniquement entre les deux sites synchronisés."
+  },
+  "optClicks": {
+    "message": "Reproduire les clics"
+  },
+  "optClicksHelp": {
+    "message": "Répète les clics sur l’élément correspondant. Jamais sur les formulaires, paiements ou suppressions."
+  },
+  "optHover": {
+    "message": "Reproduire le survol"
+  },
+  "optHoverHelp": {
+    "message": "Affiche les styles et menus de survol des deux côtés."
+  },
+  "optCursor": {
+    "message": "Afficher le curseur"
+  },
+  "optCursorHelp": {
+    "message": "Affiche un pointeur dans l’autre volet, là où se trouve votre souris. Affichage seul, jamais de clic."
+  },
+  "optWpAdminBar": {
+    "message": "Masquer la barre d’admin WordPress"
+  },
+  "optWpAdminBarHelp": {
+    "message": "Masque la barre pendant la synchro pour aligner les deux mises en page."
+  },
+  "btnAddRuler": {
+    "message": "Ajouter une règle"
+  },
+  "btnShowPanel": {
+    "message": "Afficher le bouton sur la page"
+  },
+  "btnHidePanel": {
+    "message": "Masquer le bouton sur la page"
+  },
+  "sectionDefaults": {
+    "message": "Réglages des nouvelles Split Views"
+  },
+  "sectionDefaultsHelp": {
+    "message": "Appliqués à chaque nouvelle paire. Les paires existantes gardent leurs réglages."
+  },
+  "sectionButton": {
+    "message": "Bouton sur la page"
+  },
+  "optAlwaysShow": {
+    "message": "Afficher dans chaque Split View"
+  },
+  "optAlwaysShowHelp": {
+    "message": "Désactivez pour n’afficher le bouton flottant qu’à la demande."
+  },
+  "footerShortcuts": {
+    "message": "Raccourcis clavier"
+  },
+  "footerMadeBy": {
+    "message": "Créé par"
+  },
+  "panelClose": {
+    "message": "Fermer"
+  },
+  "bubbleLabel": {
+    "message": "Ouvrir les commandes de SplitScreen Browser Sync"
+  },
+  "pillSynced": {
+    "message": "Synchronisé"
+  },
+  "pillPaused": {
+    "message": "En pause"
+  },
+  "pillReloading": {
+    "message": "Actualisation"
+  },
+  "pillError": {
+    "message": "Sans réponse"
+  },
+  "sectionOptions": {
+    "message": "Options"
+  },
+  "sectionOffset": {
+    "message": "Décalage de défilement"
+  },
+  "offsetHelp": {
+    "message": "Le volet droit défile d’autant de pixels de plus que le gauche."
+  },
+  "offsetInputLabel": {
+    "message": "Décalage de défilement en pixels"
+  },
+  "btnApply": {
+    "message": "Appliquer"
+  },
+  "btnReset": {
+    "message": "Réinitialiser"
+  },
+  "sectionReload": {
+    "message": "Actualiser"
+  },
+  "colLeft": {
+    "message": "Gauche"
+  },
+  "colRight": {
+    "message": "Droite"
+  },
+  "btnReload": {
+    "message": "Actualiser"
+  },
+  "btnHardReload": {
+    "message": "Forcer"
+  },
+  "reloadLeftLabel": {
+    "message": "Actualiser le volet gauche"
+  },
+  "reloadRightLabel": {
+    "message": "Actualiser le volet droit"
+  },
+  "hardReloadLeftLabel": {
+    "message": "Forcer l’actualisation du volet gauche, sans cache"
+  },
+  "hardReloadRightLabel": {
+    "message": "Forcer l’actualisation du volet droit, sans cache"
+  },
+  "btnSwap": {
+    "message": "Inverser les côtés"
+  },
+  "btnRuler": {
+    "message": "Ajouter une règle"
+  },
+  "rulerThickness": {
+    "message": "Épaisseur"
+  },
+  "rulerDelete": {
+    "message": "Supprimer"
+  },
+  "rulerLabel": {
+    "message": "Règle. Faites-la glisser pour la déplacer, appuyez sur Suppr pour la retirer."
+  },
+  "toastNoPair": {
+    "message": "Aucune paire Split View trouvée. Réessayez dans un instant."
+  },
+  "panelTitle": {
+    "message": "SplitScreen Sync"
+  },
+  "statusOriginPausedTitle": {
+    "message": "En pause : un autre site a été ouvert"
+  },
+  "statusOriginPausedBody": {
+    "message": "Un volet a quitté le site synchronisé. Cliquez sur Lancer la synchro pour synchroniser ces deux sites."
+  },
+  "pillOriginPaused": {
+    "message": "En pause : autre site"
+  },
+  "toastClickSkipped": {
+    "message": "Clic non reproduit (formulaire/action)"
+  },
+  "tabsLabel": {
+    "message": "Sections"
+  },
+  "tabSync": {
+    "message": "Synchro"
+  },
+  "tabSettings": {
+    "message": "Paramètres"
+  },
+  "needPairHint": {
+    "message": "Ouvrez deux pages web dans une Split View pour utiliser cette fonction."
+  },
+  "toastOffsetSet": {
+    "message": "Décalage $OFFSET$ px",
+    "placeholders": {
+      "offset": {
+        "content": "$1",
+        "example": "+120"
+      }
+    }
+  },
+  "altHint": {
+    "message": "Astuce : maintenez Alt (Option) en défilant pour déplacer un seul côté ; l’écart devient le décalage."
+  },
+  "optAlign": {
+    "message": "Alignement"
+  },
+  "optAlignHelp": {
+    "message": "Au pixel près copie la position de défilement. Sur élément/contenu garde la même section en haut si les pages n’ont pas la même hauteur."
+  },
+  "alignPixel": {
+    "message": "Au pixel près"
+  },
+  "alignElement": {
+    "message": "Sur élément/contenu"
+  },
+  "optContainers": {
+    "message": "Synchroniser les zones défilantes"
+  },
+  "optContainersHelp": {
+    "message": "Fait aussi défiler la zone correspondante de l’autre côté : panneaux latéraux, modales, listes."
+  },
+  "optZoom": {
+    "message": "Synchroniser le zoom"
+  },
+  "optZoomHelp": {
+    "message": "Zoomer d’un côté (Ctrl/⌘ + ou −) applique le même niveau de zoom à l’autre."
+  },
+  "optInput": {
+    "message": "Synchroniser la saisie"
+  },
+  "optInputHelp": {
+    "message": "Copie ce que vous saisissez ou sélectionnez dans un formulaire vers le champ correspondant de l’autre côté. L’autre site reçoit ce texte. Jamais les mots de passe, codes, champs de paiement ou de fichier ; aucun envoi."
+  },
+  "tabCompare": {
+    "message": "Comparer"
+  },
+  "sectionPaneSizes": {
+    "message": "Taille des volets"
+  },
+  "paneSizesHelp": {
+    "message": "Chrome ne permet pas de régler le séparateur : un préréglage redimensionne donc la fenêtre jusqu’à ce que le volet choisi ait cette largeur. L’autre volet suit."
+  },
+  "paneSizeUnknown": {
+    "message": "inconnue"
+  },
+  "presetSideLabel": {
+    "message": "Volet à redimensionner"
+  },
+  "presetGroupLabel": {
+    "message": "Largeurs prédéfinies"
+  },
+  "presetReached": {
+    "message": "Le volet $SIDE$ fait maintenant $WIDTH$ px de large.",
+    "placeholders": {
+      "side": {
+        "content": "$1",
+        "example": "gauche"
+      },
+      "width": {
+        "content": "$2",
+        "example": "768"
+      }
+    }
+  },
+  "presetLimited": {
+    "message": "Pas assez de place à l’écran : le volet $SIDE$ fait $WIDTH$ px de large.",
+    "placeholders": {
+      "side": {
+        "content": "$1",
+        "example": "gauche"
+      },
+      "width": {
+        "content": "$2",
+        "example": "1180"
+      }
+    }
+  },
+  "presetFailed": {
+    "message": "Impossible de redimensionner la fenêtre."
+  },
+  "sideLeftLower": {
+    "message": "gauche"
+  },
+  "sideRightLower": {
+    "message": "droit"
+  },
+  "tabChecklist": {
+    "message": "Checklist"
+  },
+  "checklistHelp": {
+    "message": "Chemins à vérifier un par un sur les deux sites. Enregistrés pour cette paire de sites."
+  },
+  "checklistEmpty": {
+    "message": "Aucune page pour l’instant. Collez des chemins ou URL ci-dessous, ou ajoutez la page actuelle."
+  },
+  "checklistProgress": {
+    "message": "$DONE$ sur $TOTAL$ vérifiées",
+    "placeholders": {
+      "done": {
+        "content": "$1",
+        "example": "3"
+      },
+      "total": {
+        "content": "$2",
+        "example": "12"
+      }
+    }
+  },
+  "checklistFailCount": {
+    "message": "$COUNT$ en erreur",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "2"
+      }
+    }
+  },
+  "checklistPosition": {
+    "message": "Page $INDEX$ sur $TOTAL$",
+    "placeholders": {
+      "index": {
+        "content": "$1",
+        "example": "3"
+      },
+      "total": {
+        "content": "$2",
+        "example": "12"
+      }
+    }
+  },
+  "checklistNoCurrent": {
+    "message": "Cliquez sur Suivant pour ouvrir la première page dans les deux volets."
+  },
+  "checklistNeedSync": {
+    "message": "Lancez une fois la synchro pour que les deux sites soient connus ; Précédent/Suivant ouvrira ensuite les pages."
+  },
+  "btnPrev": {
+    "message": "Précédent"
+  },
+  "btnNext": {
+    "message": "Suivant"
+  },
+  "statusOk": {
+    "message": "OK"
+  },
+  "statusFail": {
+    "message": "Erreur"
+  },
+  "statusNa": {
+    "message": "N/A"
+  },
+  "statusOpen": {
+    "message": "À vérifier"
+  },
+  "checklistStatusLabel": {
+    "message": "Résultat pour cette page"
+  },
+  "checklistNote": {
+    "message": "Note"
+  },
+  "checklistNotePlaceholder": {
+    "message": "Qu’est-ce qui diffère ?"
+  },
+  "checklistPastePlaceholder": {
+    "message": "/pricing/\n/contact/\nhttps://example.com/about/"
+  },
+  "checklistPasteLabel": {
+    "message": "Chemins ou URL, un par ligne"
+  },
+  "btnAddPaths": {
+    "message": "Ajouter"
+  },
+  "btnAddCurrent": {
+    "message": "Ajouter la page actuelle"
+  },
+  "btnExportCsv": {
+    "message": "Exporter en CSV"
+  },
+  "btnCopyText": {
+    "message": "Copier en texte"
+  },
+  "btnClearList": {
+    "message": "Vider la liste"
+  },
+  "btnClearConfirm": {
+    "message": "Cliquez à nouveau pour vider"
+  },
+  "checklistAdded": {
+    "message": "Ajoutées : $COUNT$",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "3"
+      }
+    }
+  },
+  "checklistCopied": {
+    "message": "Copié dans le presse-papiers"
+  },
+  "checklistRemove": {
+    "message": "Retirer $PATH$",
+    "placeholders": {
+      "path": {
+        "content": "$1",
+        "example": "/pricing/"
+      }
+    }
+  },
+  "checklistOpen": {
+    "message": "Ouvrir $PATH$ dans les deux volets",
+    "placeholders": {
+      "path": {
+        "content": "$1",
+        "example": "/pricing/"
+      }
+    }
+  },
+  "checklistAllPages": {
+    "message": "Toutes les pages"
+  },
+  "csvHeader": {
+    "message": "#,Chemin,Résultat,Note,URL gauche,URL droite"
+  },
+  "sectionChecklist": {
+    "message": "Checklist"
+  },
+  "sectionHistory": {
+    "message": "Paires récentes"
+  },
+  "historyHelp": {
+    "message": "Paires dont vous avez lancé la synchro. Cliquez sur l’une d’elles pour rouvrir les deux pages côte à côte."
+  },
+  "historyEmpty": {
+    "message": "Les paires apparaissent ici dès que vous lancez la synchro."
+  },
+  "historyPin": {
+    "message": "Épingler en favori"
+  },
+  "historyUnpin": {
+    "message": "Retirer des favoris"
+  },
+  "historyRename": {
+    "message": "Renommer"
+  },
+  "historyDelete": {
+    "message": "Retirer de l’historique"
+  },
+  "historyNameLabel": {
+    "message": "Nom de cette paire"
+  },
+  "historyOpenLabel": {
+    "message": "Ouvrir $NAME$ côte à côte",
+    "placeholders": {
+      "name": {
+        "content": "$1",
+        "example": "example.com ↔ staging.example.com"
+      }
+    }
+  },
+  "historyReused": {
+    "message": "Chargement des deux pages dans cette Split View. La synchro démarre une fois qu’elles sont chargées."
+  },
+  "historyCreated": {
+    "message": "Ouvert dans une nouvelle Split View. La synchro démarre une fois les deux pages chargées."
+  },
+  "historyManual": {
+    "message": "Les deux pages sont ouvertes côte à côte. Sélectionnez les deux onglets (clic sur l’un, Maj+clic sur l’autre), faites un clic droit, choisissez l’option de vue fractionnée, puis cliquez sur Lancer la synchro."
+  },
+  "historyFailed": {
+    "message": "Impossible d’ouvrir cette paire."
+  },
+  "optRememberPairs": {
+    "message": "Mémoriser les paires"
+  },
+  "optRememberPairsHelp": {
+    "message": "Conserve les sites et chemins (sans paramètres d’URL) des paires synchronisées, sur cet appareil uniquement."
+  },
+  "btnClearHistory": {
+    "message": "Effacer l’historique (favoris conservés)"
+  },
+  "historyCleared": {
+    "message": "Historique effacé."
+  },
+  "btnSave": {
+    "message": "Enregistrer"
+  },
+  "sectionOverlay": {
+    "message": "Superposition"
+  },
+  "overlayHelp": {
+    "message": "Superpose une image d’un côté sur l’autre pour faire ressortir les différences. L’image est actualisée dès que vous arrêtez de défiler."
+  },
+  "overlayPanelHelp": {
+    "message": "Une image de l’autre côté, par-dessus ce côté."
+  },
+  "overlayPermissionHelp": {
+    "message": "Chrome n’autorise une extension à capturer un onglet qu’avec l’accès à tous les sites ; la superposition le demande donc une fois. L’image reste dans votre navigateur."
+  },
+  "btnAllowCapture": {
+    "message": "Autoriser la capture des volets"
+  },
+  "overlayNeedPermission": {
+    "message": "Autorisez d’abord la capture des volets : menu de la barre d’outils → Comparer."
+  },
+  "overlayNeedSync": {
+    "message": "Lancez la synchro pour utiliser la superposition."
+  },
+  "overlayShow": {
+    "message": "Afficher la superposition"
+  },
+  "overlayShowHere": {
+    "message": "Afficher l’autre côté par-dessus celui-ci"
+  },
+  "overlayOver": {
+    "message": "Afficher sur"
+  },
+  "overlayOpacity": {
+    "message": "Opacité"
+  },
+  "overlayDifference": {
+    "message": "Mode différence"
+  },
+  "overlayDifferenceHelp": {
+    "message": "Les pixels identiques deviennent noirs ; les différences ressortent."
+  },
+  "overlaySwipe": {
+    "message": "Séparateur glissant"
+  },
+  "overlaySwipeHelp": {
+    "message": "Faites glisser le séparateur sur la page pour comparer les deux côtés au même endroit."
+  },
+  "overlaySwipeLabel": {
+    "message": "Position du séparateur"
+  },
+  "overlayRefresh": {
+    "message": "Actualiser l’image"
+  },
+  "overlayDeclined": {
+    "message": "Sans cette autorisation, la superposition ne peut pas capturer l’autre volet."
+  },
+  "cmdToggleInspect": {
+    "message": "Activer/désactiver l’inspection des différences CSS"
+  },
+  "sectionInspect": {
+    "message": "Différences CSS"
+  },
+  "inspectToggle": {
+    "message": "Inspecter les différences"
+  },
+  "inspectHelp": {
+    "message": "Pointez un élément d’un côté : il est encadré des deux côtés et un panneau liste le CSS qui diffère (police, taille, couleur, espacement, mise en page). Cliquez pour figer, Esc pour arrêter."
+  },
+  "inspectNoMatch": {
+    "message": "Aucun élément correspondant de l’autre côté."
+  },
+  "inspectSame": {
+    "message": "Aucune différence dans les propriétés vérifiées."
+  },
+  "inspectProperty": {
+    "message": "Propriété"
+  },
+  "inspectHint": {
+    "message": "Cliquer pour figer · Esc pour arrêter"
+  },
+  "inspectHintFrozen": {
+    "message": "Figé · cliquer pour reprendre · Esc pour arrêter"
+  },
+  "inspectNeedSync": {
+    "message": "Lancez la synchro pour inspecter les différences."
+  },
+  "badgeSyncedWith": {
+    "message": "Synchronisé avec $HOST$",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "staging.example.com"
+      }
+    }
+  },
+  "badgeReloading": {
+    "message": "Synchronisé · un volet s’actualise"
+  },
+  "suggestTitle": {
+    "message": "Lancer la synchro ?"
+  },
+  "suggestStart": {
+    "message": "Lancer"
+  },
+  "suggestDismiss": {
+    "message": "Plus tard"
+  },
+  "suggestNever": {
+    "message": "Ne plus proposer pour cette paire"
+  },
+  "suggestPopupLabel": {
+    "message": "Suggestion :"
+  },
+  "suggestWhy": {
+    "message": "On dirait deux versions du même site."
+  },
+  "sectionSuggest": {
+    "message": "Suggestions"
+  },
+  "optSuggest": {
+    "message": "Proposer la synchro"
+  },
+  "optSuggestHelp": {
+    "message": "Propose de lancer la synchro quand les deux volets ressemblent à deux versions d’un même site (même page, ou live et staging). Jamais de lancement automatique."
+  },
+  "btnSuggestReset": {
+    "message": "Proposer à nouveau les paires ignorées"
+  },
+  "suggestResetDone": {
+    "message": "Les paires ignorées seront à nouveau proposées."
+  }
+}
