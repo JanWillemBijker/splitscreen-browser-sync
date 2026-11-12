@@ -632,5 +632,17 @@
   },
   "inspectNeedSync": {
     "message": "Start de sync om verschillen te inspecteren."
+  },
+  "badgeSyncedWith": {
+    "message": "Gesynchroniseerd met $HOST$",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "staging.example.com"
+      }
+    }
+  },
+  "badgeReloading": {
+    "message": "Gesynchroniseerd · een helft herlaadt"
   }
 }

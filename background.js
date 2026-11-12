@@ -707,7 +707,90 @@ function buildUiStateForTab(group, tabId, show = true) {
   };
 }
 
+// ---- Toolbar badge -----------------------------------------------------------
+// Per-tab badge and tooltip on the toolbar icon for both panes of a pair:
+// synced (green dot), paused because a pane left its pinned site (orange
+// "II"), reloading (grey dot), not responding (red "!"). No badge when the tab
+// is not in a pair or sync is simply off. The last value per tab is cached so
+// the frequent state broadcasts cost no extra API calls; Chrome drops
+// tab-specific action values when the tab navigates, so the cache entry is
+// forgotten on every load (see tabs.onUpdated).
+const BADGES = Object.freeze({
+  synced: { text: '●', color: '#12a26b' },
+  paused: { text: 'II', color: '#c26a00' },
+  reloading: { text: '●', color: '#8a9690' },
+  error: { text: '!', color: '#c92a2a' }
+});
+const badgeCache = new Map();
+
+function badgeKindFor(group) {
+  if (!group) return null;
+  if (group.error) return 'error';
+  if (!group.enabled) return group.pauseReason === PAUSE_ORIGIN_CHANGED ? 'paused' : null;
+  if (group.isReloadingTabs && Object.keys(group.isReloadingTabs).length) return 'reloading';
+  return 'synced';
+}
+
+function hostOfOrigin(origin) {
+  try {
+    return origin ? new URL(origin).host : '';
+  } catch (_error) {
+    return '';
+  }
+}
+
+function badgeTitleFor(group, tabId, kind) {
+  const peerId = getPeerTabId(group, tabId);
+  const peerHost = hostOfOrigin(pinnedOriginFor(group, peerId)
+    || (peerId === group.leftTabId ? group.leftOrigin : group.rightOrigin));
+  let status = '';
+  if (kind === 'synced') status = peerHost ? t('badgeSyncedWith', [peerHost]) : t('statusSyncedTitle');
+  else if (kind === 'reloading') status = t('badgeReloading');
+  else if (kind === 'paused') status = t('statusOriginPausedTitle');
+  else if (kind === 'error') status = t('statusErrorTitle');
+  return `${t('extName')}\n${status}`;
+}
+
+async function setTabBadge(tabId, kind, title) {
+  if (typeof tabId !== 'number') return;
+  const signature = kind ? `${kind}|${title}` : '';
+  if (badgeCache.get(tabId) === signature) return;
+  badgeCache.set(tabId, signature);
+  try {
+    if (!kind) {
+      await Promise.all([
+        chrome.action.setBadgeText({ tabId, text: '' }),
+        chrome.action.setTitle({ tabId, title: t('extName') })
+      ]);
+      return;
+    }
+    const badge = BADGES[kind];
+    await Promise.all([
+      chrome.action.setBadgeBackgroundColor({ tabId, color: badge.color }),
+      chrome.action.setBadgeTextColor ? chrome.action.setBadgeTextColor({ tabId, color: '#ffffff' }) : null,
+      chrome.action.setBadgeText({ tabId, text: badge.text }),
+      chrome.action.setTitle({ tabId, title })
+    ]);
+  } catch (error) {
+    // Tab closed in the meantime; try again next time.
+    badgeCache.delete(tabId);
+    debug('badge update failed', tabId, error?.message || error);
+  }
+}
+
+function updatePairBadges(group) {
+  const kind = badgeKindFor(group);
+  for (const tabId of groupTabIds(group)) {
+    setTabBadge(tabId, kind, kind ? badgeTitleFor(group, tabId, kind) : '').catch(() => undefined);
+  }
+}
+
+function clearTabBadge(tabId) {
+  setTabBadge(tabId, null, '').catch(() => undefined);
+}
+
 async function sendHiddenState(tabId, reason) {
+  clearTabBadge(tabId);
   const hiddenState = buildHiddenState(reason);
   const firstAttempt = await safeSendMessage(tabId, { type: MSG.HIDE_FLOATING_UI, state: hiddenState });
   if (firstAttempt?.ok) return;
@@ -723,6 +806,7 @@ async function sendHiddenState(tabId, reason) {
 }
 
 async function sendGroupState(group, targetTabId = null) {
+  updatePairBadges(group);
   const tabIds = targetTabId ? [targetTabId] : groupTabIds(group);
   const show = await shouldShowFloatingUi(group);
   await getChecklists();
@@ -3400,6 +3484,8 @@ async function handleTabUpdated(tabId, changeInfo, tab) {
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (!tab || typeof tab.windowId !== 'number') return;
+  // Chrome resets tab-specific badge values on navigation; set them again.
+  if (changeInfo.status || changeInfo.url) badgeCache.delete(tabId);
   runForTab(tabId, () => handleTabUpdated(tabId, changeInfo, tab));
 });
 
@@ -3410,6 +3496,7 @@ chrome.tabs.onZoomChange.addListener((zoomChangeInfo) => {
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
+  badgeCache.delete(tabId);
   (async () => {
     const state = await getState();
     const key = state.tabToGroupKey[String(tabId)];
