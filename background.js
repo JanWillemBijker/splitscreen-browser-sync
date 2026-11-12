@@ -94,6 +94,12 @@ const MSG = Object.freeze({
   VIEWPORT: 'SVSS_VIEWPORT',
   GET_VIEWPORT: 'SVSS_GET_VIEWPORT',
   POPUP_SET_PANE_WIDTH: 'SVSS_POPUP_SET_PANE_WIDTH',
+  POPUP_HISTORY_GET: 'SVSS_POPUP_HISTORY_GET',
+  POPUP_HISTORY_OPEN: 'SVSS_POPUP_HISTORY_OPEN',
+  POPUP_HISTORY_UPDATE: 'SVSS_POPUP_HISTORY_UPDATE',
+  POPUP_HISTORY_DELETE: 'SVSS_POPUP_HISTORY_DELETE',
+  POPUP_HISTORY_CLEAR: 'SVSS_POPUP_HISTORY_CLEAR',
+  POPUP_SET_REMEMBER_PAIRS: 'SVSS_POPUP_SET_REMEMBER_PAIRS',
   POPUP_CHECKLIST_GET: 'SVSS_POPUP_CHECKLIST_GET',
   POPUP_CHECKLIST_ADD: 'SVSS_POPUP_CHECKLIST_ADD',
   POPUP_CHECKLIST_ADD_CURRENT: 'SVSS_POPUP_CHECKLIST_ADD_CURRENT',
@@ -282,6 +288,7 @@ function normalizeSettings(raw) {
   const boolOr = (value, fallback) => (typeof value === 'boolean' ? value : fallback);
   return {
     alwaysShowButtonOnSplitScreen: boolOr(settings.alwaysShowButtonOnSplitScreen, DEFAULT_ALWAYS_SHOW_BUTTON),
+    rememberPairs: boolOr(settings.rememberPairs, true),
     defaultHideWpAdminBar: boolOr(settings.defaultHideWpAdminBar, DEFAULT_HIDE_WP_ADMIN_BAR),
     defaultSyncNavigation: boolOr(settings.defaultSyncNavigation, DEFAULT_SYNC_NAVIGATION),
     defaultMirrorClicks: boolOr(settings.defaultMirrorClicks, DEFAULT_MIRROR_CLICKS),
@@ -860,6 +867,207 @@ async function scanWindow(windowId = null) {
   return state;
 }
 
+// ---- History of pairs ---------------------------------------------------------
+// Every pair the user starts sync for is remembered (origin + path of each
+// pane; the query string and # part are dropped) in chrome.storage.local, so
+// it can be reopened with one click. Can be switched off and cleared.
+const HISTORY_KEY = 'svssPairHistory';
+const MAX_HISTORY_RECENT = 20;
+const MAX_HISTORY_PINNED = 30;
+const MAX_HISTORY_NAME = 60;
+const HISTORY_ID_PATTERN = /^h-[a-z0-9]{1,16}-[a-z0-9]{1,8}$/;
+
+let historyCache = null;
+let historyPromise = null;
+
+function pageKeyOf(url) {
+  if (!isNormalHttpUrl(url)) return null;
+  try {
+    const parsed = new URL(url);
+    return { origin: parsed.origin, path: parsed.pathname.slice(0, MAX_PATH_LENGTH) };
+  } catch (_error) {
+    return null;
+  }
+}
+
+function normalizeHistory(raw) {
+  const out = [];
+  for (const entry of Array.isArray(raw) ? raw : []) {
+    if (!entry || typeof entry !== 'object' || !HISTORY_ID_PATTERN.test(String(entry.id))) continue;
+    const left = pageKeyOf(`${entry.left?.origin}${entry.left?.path || '/'}`);
+    const right = pageKeyOf(`${entry.right?.origin}${entry.right?.path || '/'}`);
+    if (!left || !right || left.origin !== entry.left.origin || right.origin !== entry.right.origin) continue;
+    out.push({
+      id: entry.id,
+      left,
+      right,
+      name: typeof entry.name === 'string' ? entry.name.slice(0, MAX_HISTORY_NAME) : '',
+      pinned: Boolean(entry.pinned),
+      lastUsed: Number(entry.lastUsed) || 0,
+      uses: Math.max(1, Math.min(100000, Number(entry.uses) || 1))
+    });
+  }
+  return out;
+}
+
+function getHistory() {
+  if (historyCache) return Promise.resolve(historyCache);
+  if (!historyPromise) {
+    historyPromise = (async () => {
+      let loaded;
+      try {
+        loaded = normalizeHistory((await chrome.storage.local.get(HISTORY_KEY))[HISTORY_KEY]);
+      } catch (_error) {
+        loaded = [];
+      }
+      if (!historyCache) historyCache = loaded;
+      return historyCache;
+    })();
+  }
+  return historyPromise;
+}
+
+async function saveHistory() {
+  const list = historyCache || [];
+  list.sort((a, b) => (b.pinned - a.pinned) || (b.lastUsed - a.lastUsed));
+  const pinned = list.filter((entry) => entry.pinned).slice(0, MAX_HISTORY_PINNED);
+  const recent = list.filter((entry) => !entry.pinned).slice(0, MAX_HISTORY_RECENT);
+  historyCache = [...pinned, ...recent];
+  try {
+    await chrome.storage.local.set({ [HISTORY_KEY]: historyCache });
+  } catch (error) {
+    debug('Could not save pair history', error);
+  }
+}
+
+function pairKeyOfEntry(entry) {
+  return [entry.left.origin, entry.right.origin].sort().join('|');
+}
+
+async function rememberPair(group) {
+  const settings = await getSettings();
+  if (!settings.rememberPairs) return;
+  const [leftTab, rightTab] = await Promise.all([safeGetTab(group.leftTabId), safeGetTab(group.rightTabId)]);
+  const left = pageKeyOf(leftTab?.url);
+  const right = pageKeyOf(rightTab?.url);
+  if (!left || !right) return;
+  const history = await getHistory();
+  const key = [left.origin, right.origin].sort().join('|');
+  const existing = history.find((entry) => pairKeyOfEntry(entry) === key);
+  if (existing) {
+    existing.left = left;
+    existing.right = right;
+    existing.lastUsed = Date.now();
+    existing.uses += 1;
+  } else {
+    history.push({
+      id: `h-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+      left,
+      right,
+      name: '',
+      pinned: false,
+      lastUsed: Date.now(),
+      uses: 1
+    });
+  }
+  await saveHistory();
+}
+
+async function waitForTabsLoaded(tabIds, timeoutMs = 15000) {
+  const until = Date.now() + timeoutMs;
+  while (Date.now() < until) {
+    const tabs = await Promise.all(tabIds.map((id) => safeGetTab(id)));
+    if (tabs.every((tab) => tab && tab.status === 'complete' && isNormalHttpUrl(tab.url))) return true;
+    if (tabs.some((tab) => !tab)) return false;
+    await sleepMs(250);
+  }
+  return false;
+}
+
+// Reopens a remembered pair. If the active tab is already in a Split View,
+// both URLs are loaded into that pair. Otherwise two tabs are opened next to
+// each other and, where Chrome supports it (chrome.tabs.createSplit, Chrome
+// 155+), turned into a Split View. Sync is started once both pages loaded.
+async function openHistoryEntry(id) {
+  const history = await getHistory();
+  const entry = history.find((item) => item.id === id);
+  if (!entry) return { ok: false };
+  const leftUrl = `${entry.left.origin}${entry.left.path}`;
+  const rightUrl = `${entry.right.origin}${entry.right.path}`;
+  if (!isNormalHttpUrl(leftUrl) || !isNormalHttpUrl(rightUrl)) return { ok: false };
+  entry.lastUsed = Date.now();
+  entry.uses += 1;
+  await saveHistory();
+
+  const { activeTab, group } = await activeGroup();
+  if (group) {
+    group.enabled = false;
+    group.pauseReason = null;
+    group.error = null;
+    group.navigationLocks = {};
+    await saveStateNow();
+    await sendGroupState(group);
+    await Promise.all([
+      chrome.tabs.update(group.leftTabId, { url: leftUrl }),
+      chrome.tabs.update(group.rightTabId, { url: rightUrl })
+    ]);
+    startSyncWhenLoaded([group.leftTabId, group.rightTabId], group.leftTabId, group.windowId);
+    return { ok: true, mode: 'reused' };
+  }
+
+  const windowId = typeof activeTab?.windowId === 'number' ? activeTab.windowId : undefined;
+  const left = await chrome.tabs.create({ url: leftUrl, windowId, active: true });
+  const right = await chrome.tabs.create({ url: rightUrl, windowId: left.windowId, index: left.index + 1, active: false });
+  if (typeof chrome.tabs.createSplit !== 'function') return { ok: true, mode: 'manual' };
+  try {
+    await chrome.tabs.createSplit([left.id, right.id]);
+  } catch (error) {
+    debug('createSplit failed', error?.message || error);
+    return { ok: true, mode: 'manual' };
+  }
+  startSyncWhenLoaded([left.id, right.id], left.id, left.windowId);
+  return { ok: true, mode: 'created' };
+}
+
+function startSyncWhenLoaded(tabIds, sourceTabId, windowId) {
+  (async () => {
+    await sleepMs(300);
+    if (!(await waitForTabsLoaded(tabIds))) return;
+    await enableCurrentSplitView(sourceTabId, windowId);
+  })().catch((error) => debug('start after reopen failed', error));
+}
+
+function historyForPopup(history) {
+  return history.map((entry) => ({ ...entry }));
+}
+
+async function handlePopupHistoryMessage(message) {
+  const history = await getHistory();
+  const settings = await getSettings();
+  const id = String(message.id || '');
+  if (message.type === MSG.POPUP_HISTORY_OPEN) {
+    const result = await openHistoryEntry(id);
+    return { ok: true, result, history: historyForPopup(historyCache), rememberPairs: settings.rememberPairs };
+  }
+  if (message.type === MSG.POPUP_HISTORY_UPDATE) {
+    const entry = history.find((item) => item.id === id);
+    if (entry) {
+      if (typeof message.pinned === 'boolean') entry.pinned = message.pinned;
+      if (typeof message.name === 'string') entry.name = message.name.trim().slice(0, MAX_HISTORY_NAME);
+      await saveHistory();
+    }
+  } else if (message.type === MSG.POPUP_HISTORY_DELETE) {
+    historyCache = history.filter((item) => item.id !== id);
+    await saveHistory();
+  } else if (message.type === MSG.POPUP_HISTORY_CLEAR) {
+    historyCache = history.filter((item) => item.pinned && message.keepPinned === true);
+    await saveHistory();
+  } else if (message.type === MSG.POPUP_SET_REMEMBER_PAIRS) {
+    await saveSettings({ ...settings, rememberPairs: Boolean(message.value) });
+  }
+  return { ok: true, history: historyForPopup(historyCache), rememberPairs: (await getSettings()).rememberPairs };
+}
+
 // ---- Page checklist -----------------------------------------------------------
 // A list of paths to check page by page (live vs staging), stored per pair
 // of origins in chrome.storage.local: path, status (ok / fail / na) and a
@@ -1433,6 +1641,7 @@ async function enableCurrentSplitView(tabId, windowId) {
   group.navigationLocks = {};
   group.hideWpAdminBar = typeof group.hideWpAdminBar === 'boolean' ? group.hideWpAdminBar : DEFAULT_HIDE_WP_ADMIN_BAR;
   await reconcileReloading(group);
+  await rememberPair(group);
 
   await saveStateNow();
   await sendGroupState(group);
@@ -1462,6 +1671,7 @@ async function enableAllSplitViewsInCurrentWindow() {
     group.error = null;
     group.navigationLocks = {};
     group.hideWpAdminBar = typeof group.hideWpAdminBar === 'boolean' ? group.hideWpAdminBar : DEFAULT_HIDE_WP_ADMIN_BAR;
+    await rememberPair(group);
   }
 
   await saveStateNow();
@@ -2510,6 +2720,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === MSG.VIEWPORT) {
       await handleViewportMessage(sender, message);
       sendResponse({ ok: true });
+      return;
+    }
+
+    if (message.type.startsWith('SVSS_POPUP_HISTORY_') || message.type === MSG.POPUP_SET_REMEMBER_PAIRS) {
+      sendResponse(await handlePopupHistoryMessage(message));
       return;
     }
 

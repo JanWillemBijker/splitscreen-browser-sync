@@ -140,6 +140,16 @@
             <button id="showCurrent" type="button" class="btn btn-secondary"></button>
           </div>
         </div>
+
+        <div class="group" id="historyGroup">
+          <div class="group-head">
+            <h2 class="group-title" data-i18n="sectionHistory"></h2>
+            <p class="group-help" data-i18n="historyHelp"></p>
+          </div>
+          <ul class="history" id="historyList"></ul>
+          <p class="empty-hint" id="historyEmpty" data-i18n="historyEmpty"></p>
+          <p class="result-line" id="historyResult" role="status" aria-live="polite"></p>
+        </div>
       </section>
 
       <!-- Checklist: pages to check on both sites. -->
@@ -278,6 +288,23 @@
               <input id="defaultHideWpAdminBar" type="checkbox" class="switch">
             </label>
           </div>
+        </div>
+
+        <div class="group">
+          <div class="group-head">
+            <h2 class="group-title" data-i18n="sectionHistory"></h2>
+          </div>
+          <div class="options">
+            <label class="option">
+              <span class="option-text">
+                <span class="option-label" data-i18n="optRememberPairs"></span>
+                <span class="option-help" data-i18n="optRememberPairsHelp"></span>
+              </span>
+              <input id="rememberPairs" type="checkbox" class="switch">
+            </label>
+          </div>
+          <button type="button" class="link-button link-danger-inline" id="clearHistory" data-i18n="btnClearHistory"></button>
+          <p class="result-line" id="clearHistoryResult" role="status" aria-live="polite"></p>
         </div>
 
         <div class="group">

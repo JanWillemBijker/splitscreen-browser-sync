@@ -9,6 +9,12 @@ const MSG = Object.freeze({
   POPUP_SET_GROUP_OPTION: 'SVSS_POPUP_SET_GROUP_OPTION',
   POPUP_SET_GROUP_CHOICE: 'SVSS_POPUP_SET_GROUP_CHOICE',
   POPUP_SET_PANE_WIDTH: 'SVSS_POPUP_SET_PANE_WIDTH',
+  POPUP_HISTORY_GET: 'SVSS_POPUP_HISTORY_GET',
+  POPUP_HISTORY_OPEN: 'SVSS_POPUP_HISTORY_OPEN',
+  POPUP_HISTORY_UPDATE: 'SVSS_POPUP_HISTORY_UPDATE',
+  POPUP_HISTORY_DELETE: 'SVSS_POPUP_HISTORY_DELETE',
+  POPUP_HISTORY_CLEAR: 'SVSS_POPUP_HISTORY_CLEAR',
+  POPUP_SET_REMEMBER_PAIRS: 'SVSS_POPUP_SET_REMEMBER_PAIRS',
   POPUP_CHECKLIST_GET: 'SVSS_POPUP_CHECKLIST_GET',
   POPUP_CHECKLIST_ADD: 'SVSS_POPUP_CHECKLIST_ADD',
   POPUP_CHECKLIST_ADD_CURRENT: 'SVSS_POPUP_CHECKLIST_ADD_CURRENT',
@@ -314,6 +320,143 @@ for (const button of document.querySelectorAll('[data-preset]')) {
   });
 }
 
+// ---- History of pairs ------------------------------------------------------------
+
+let historyItems = [];
+let renamingId = null;
+
+const ICONS = {
+  star: 'M8 1.8l1.9 3.9 4.3.6-3.1 3 .7 4.3L8 11.6l-3.8 2 .7-4.3-3.1-3 4.3-.6z',
+  pencil: 'M10.8 2.6l2.6 2.6-7.6 7.6-3.2.6.6-3.2zM9.4 4l2.6 2.6',
+  cross: 'M4 4l8 8M12 4l-8 8'
+};
+
+function icon(pathData) {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 16 16');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('focusable', 'false');
+  const path = document.createElementNS(ns, 'path');
+  path.setAttribute('d', pathData);
+  svg.appendChild(path);
+  return svg;
+}
+
+function iconButton(pathData, label, onClick) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'icon-btn';
+  button.setAttribute('aria-label', label);
+  button.title = label;
+  button.appendChild(icon(pathData));
+  button.addEventListener('click', onClick);
+  return button;
+}
+
+function pairTitle(entry) {
+  return entry.name || `${hostOf(entry.left.origin)} ↔ ${hostOf(entry.right.origin)}`;
+}
+
+function renderHistory(data) {
+  if (data) {
+    historyItems = Array.isArray(data.history) ? data.history : [];
+    if (typeof data.rememberPairs === 'boolean') $('rememberPairs').checked = data.rememberPairs;
+  }
+  const list = $('historyList');
+  list.textContent = '';
+  $('historyEmpty').hidden = historyItems.length > 0;
+  for (const entry of historyItems) {
+    const li = document.createElement('li');
+    li.className = 'hist-item';
+    if (renamingId === entry.id) {
+      const form = document.createElement('form');
+      form.className = 'hist-rename';
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.maxLength = 60;
+      input.value = entry.name || '';
+      input.placeholder = `${hostOf(entry.left.origin)} ↔ ${hostOf(entry.right.origin)}`;
+      input.setAttribute('aria-label', t('historyNameLabel'));
+      const save = document.createElement('button');
+      save.type = 'submit';
+      save.className = 'btn btn-secondary btn-small';
+      save.textContent = t('btnSave');
+      form.append(input, save);
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        renamingId = null;
+        renderHistory(await sendMessage({ type: MSG.POPUP_HISTORY_UPDATE, id: entry.id, name: input.value }));
+      });
+      input.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape') return;
+        event.preventDefault();
+        event.stopPropagation();
+        renamingId = null;
+        renderHistory();
+      });
+      li.appendChild(form);
+      list.appendChild(li);
+      setTimeout(() => input.focus(), 0);
+      continue;
+    }
+    const open = document.createElement('button');
+    open.type = 'button';
+    open.className = 'hist-open';
+    const name = document.createElement('span');
+    name.className = 'hist-name';
+    name.textContent = pairTitle(entry);
+    const sub = document.createElement('span');
+    sub.className = 'hist-sub';
+    sub.textContent = entry.name
+      ? `${hostOf(entry.left.origin)}${entry.left.path} · ${hostOf(entry.right.origin)}${entry.right.path}`
+      : `${entry.left.path} · ${entry.right.path}`;
+    open.append(name, sub);
+    open.setAttribute('aria-label', t('historyOpenLabel', [pairTitle(entry)]));
+    open.title = `${entry.left.origin}${entry.left.path}\n${entry.right.origin}${entry.right.path}`;
+    open.addEventListener('click', () => openHistory(entry.id));
+
+    const pin = iconButton(ICONS.star, t(entry.pinned ? 'historyUnpin' : 'historyPin'), async () => {
+      renderHistory(await sendMessage({ type: MSG.POPUP_HISTORY_UPDATE, id: entry.id, pinned: !entry.pinned }));
+    });
+    pin.setAttribute('aria-pressed', entry.pinned ? 'true' : 'false');
+    const rename = iconButton(ICONS.pencil, t('historyRename'), () => {
+      renamingId = entry.id;
+      renderHistory();
+    });
+    const remove = iconButton(ICONS.cross, t('historyDelete'), async () => {
+      renderHistory(await sendMessage({ type: MSG.POPUP_HISTORY_DELETE, id: entry.id }));
+    });
+    li.append(open, pin, rename, remove);
+    list.appendChild(li);
+  }
+}
+
+async function openHistory(id) {
+  $('historyResult').textContent = '';
+  const response = await sendMessage({ type: MSG.POPUP_HISTORY_OPEN, id });
+  if (!response) return; // the popup may close when a new tab opens
+  renderHistory(response);
+  const mode = response.result?.mode;
+  const key = !response.result?.ok ? 'historyFailed'
+    : mode === 'manual' ? 'historyManual'
+      : mode === 'created' ? 'historyCreated' : 'historyReused';
+  $('historyResult').textContent = t(key);
+}
+
+async function loadHistory() {
+  renderHistory(await sendMessage({ type: MSG.POPUP_HISTORY_GET }));
+}
+
+$('rememberPairs').addEventListener('change', async () => {
+  renderHistory(await sendMessage({ type: MSG.POPUP_SET_REMEMBER_PAIRS, value: $('rememberPairs').checked }));
+});
+
+$('clearHistory').addEventListener('click', async () => {
+  renderHistory(await sendMessage({ type: MSG.POPUP_HISTORY_CLEAR, keepPinned: true }));
+  $('clearHistoryResult').textContent = t('historyCleared');
+});
+
 // ---- Checklist tab --------------------------------------------------------------
 
 let checklist = null;
@@ -571,3 +714,4 @@ $('version').textContent = `v${chrome.runtime.getManifest().version}`;
 localize();
 restoreTab();
 refresh();
+loadHistory();

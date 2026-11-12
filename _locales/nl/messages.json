@@ -488,5 +488,68 @@
   },
   "sectionChecklist": {
     "message": "Checklist"
+  },
+  "sectionHistory": {
+    "message": "Recente paren"
+  },
+  "historyHelp": {
+    "message": "Paren waarvoor je de sync startte. Klik er een aan om beide pagina's weer naast elkaar te openen."
+  },
+  "historyEmpty": {
+    "message": "Paren verschijnen hier zodra je op Sync starten klikt."
+  },
+  "historyPin": {
+    "message": "Vastzetten als favoriet"
+  },
+  "historyUnpin": {
+    "message": "Uit favorieten halen"
+  },
+  "historyRename": {
+    "message": "Naam wijzigen"
+  },
+  "historyDelete": {
+    "message": "Uit geschiedenis verwijderen"
+  },
+  "historyNameLabel": {
+    "message": "Naam voor dit paar"
+  },
+  "historyOpenLabel": {
+    "message": "$NAME$ naast elkaar openen",
+    "placeholders": {
+      "name": {
+        "content": "$1",
+        "example": "example.com ↔ staging.example.com"
+      }
+    }
+  },
+  "historyReused": {
+    "message": "Beide pagina's worden in deze Split View geladen. De sync start zodra ze geladen zijn."
+  },
+  "historyCreated": {
+    "message": "Geopend als nieuwe Split View. De sync start zodra beide pagina's geladen zijn."
+  },
+  "historyManual": {
+    "message": "Beide pagina's staan naast elkaar open. Selecteer beide tabbladen (klik de ene, Shift-klik de andere), klik met rechts en kies de optie voor gesplitste weergave, en klik daarna op Sync starten."
+  },
+  "historyFailed": {
+    "message": "Dit paar kon niet worden geopend."
+  },
+  "optRememberPairs": {
+    "message": "Paren onthouden"
+  },
+  "optRememberPairsHelp": {
+    "message": "Bewaart de sites en paden (zonder querystring) van paren die je synchroniseert, alleen op dit apparaat."
+  },
+  "btnClearHistory": {
+    "message": "Geschiedenis wissen (favorieten blijven)"
+  },
+  "historyCleared": {
+    "message": "Geschiedenis gewist."
+  },
+  "btnSave": {
+    "message": "Opslaan"
+  },
+  "btnCancel": {
+    "message": "Annuleren"
   }
 }

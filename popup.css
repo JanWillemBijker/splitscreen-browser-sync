@@ -624,6 +624,121 @@ details[open] > .group-summary .chevron {
   transform: translateX(14px);
 }
 
+/* History ---------------------------------------------------------------- */
+
+.history {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hist-item {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 0;
+  border-top: 1px solid var(--line);
+}
+
+.hist-item:first-child {
+  border-top: 0;
+}
+
+.hist-open {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-1) var(--space-1) var(--space-1) 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.hist-open:hover .hist-name {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.hist-name,
+.hist-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hist-name {
+  font-weight: 600;
+}
+
+.hist-sub {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.icon-btn {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.icon-btn:hover {
+  background: var(--tint-neutral);
+  color: var(--ink);
+}
+
+.icon-btn svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.icon-btn[aria-pressed="true"] {
+  color: #c28a00;
+}
+
+.icon-btn[aria-pressed="true"] svg {
+  fill: currentColor;
+}
+
+.hist-rename {
+  display: flex;
+  flex: 1;
+  gap: var(--space-1);
+  padding: var(--space-1) 0;
+}
+
+.hist-rename input {
+  flex: 1;
+  min-width: 0;
+  padding: 3px var(--space-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+
+.link-danger-inline {
+  color: var(--fail-ink);
+}
+
 /* Checklist tab --------------------------------------------------------- */
 
 .origins {

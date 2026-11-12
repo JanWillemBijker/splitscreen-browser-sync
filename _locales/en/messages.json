@@ -488,5 +488,68 @@
   },
   "sectionChecklist": {
     "message": "Checklist"
+  },
+  "sectionHistory": {
+    "message": "Recent pairs"
+  },
+  "historyHelp": {
+    "message": "Pairs you started sync for. Click one to open both pages side by side again."
+  },
+  "historyEmpty": {
+    "message": "Pairs appear here after you press Start sync."
+  },
+  "historyPin": {
+    "message": "Pin as favourite"
+  },
+  "historyUnpin": {
+    "message": "Remove from favourites"
+  },
+  "historyRename": {
+    "message": "Rename"
+  },
+  "historyDelete": {
+    "message": "Remove from history"
+  },
+  "historyNameLabel": {
+    "message": "Name for this pair"
+  },
+  "historyOpenLabel": {
+    "message": "Open $NAME$ side by side",
+    "placeholders": {
+      "name": {
+        "content": "$1",
+        "example": "example.com ↔ staging.example.com"
+      }
+    }
+  },
+  "historyReused": {
+    "message": "Loading both pages into this Split View. Sync starts when they are loaded."
+  },
+  "historyCreated": {
+    "message": "Opened as a new Split View. Sync starts when both pages are loaded."
+  },
+  "historyManual": {
+    "message": "Both pages are open next to each other. Select both tabs (click one, Shift-click the other), right-click and choose the split view option, then press Start sync."
+  },
+  "historyFailed": {
+    "message": "This pair could not be opened."
+  },
+  "optRememberPairs": {
+    "message": "Remember pairs"
+  },
+  "optRememberPairsHelp": {
+    "message": "Keeps the sites and paths (no query strings) of pairs you sync, on this device only."
+  },
+  "btnClearHistory": {
+    "message": "Clear history (keeps favourites)"
+  },
+  "historyCleared": {
+    "message": "History cleared."
+  },
+  "btnSave": {
+    "message": "Save"
+  },
+  "btnCancel": {
+    "message": "Cancel"
   }
 }
