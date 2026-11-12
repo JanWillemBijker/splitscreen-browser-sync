@@ -16,7 +16,7 @@ From the Chrome Web Store (once published), or locally:
 
 ## Privacy
 
-Nothing is sent to the developer or any server: no analytics and no remote code; settings and per-pair state stay in `chrome.storage.local` / `chrome.storage.session`. Between the two panes of a pair the extension does pass data from one site to the other: the scroll position, the path/query/hash of a navigation and (when enabled) a description of the clicked or hovered element. That only happens between the two sites (origins) the pair was started on. Password, one-time-code, PIN and payment card fields are never read and clicks/focus on them are never mirrored. Full policy: [store/PRIVACY.md](store/PRIVACY.md).
+Nothing is sent to the developer or any server: no analytics and no remote code; settings, checklists, the pair history and per-pair state stay in `chrome.storage.local` / `chrome.storage.session`. Between the two panes of a pair the extension does pass data from one site to the other: the scroll position (and a description of the top element in "on element" alignment), scroll positions of scroll areas, the zoom level, the path/query/hash of a navigation, the mouse position and (when enabled) a description of the clicked or hovered element, what you type (Sync typing, **off** by default), an image of the other pane (Overlay, only when you turn it on) and CSS values of the inspected element (Inspect differences, only while on). That only happens between the two sites (origins) the pair was started on. Password, one-time-code, PIN and payment card fields are never read and never mirrored. Full policy: [store/PRIVACY.md](store/PRIVACY.md).
 
 ## Packaging for the Chrome Web Store
 
@@ -36,7 +36,7 @@ Made by BijBijker – https://bijbijker.nl
 - Treats every valid Split View group as its own isolated pair.
 - A valid group has exactly two HTTP/HTTPS tabs with the same `splitViewId`.
 - Synchronizes `scrollX` and `scrollY` in pixels.
-- Uses no percentage-based scroll mode.
+- Pixel-exact by default (no percentages); the optional *On element/content* alignment falls back to the scroll percentage only when no matching element is found.
 - Syncs bidirectionally.
 - Keeps multiple Split View pairs separated, including larger test sets such as 10 pairs.
 - Keeps sync active after normal reloads and hard reloads.
@@ -47,6 +47,74 @@ Made by BijBijker – https://bijbijker.nl
 - Optionally mirrors interactive clicks between panes, including closing overlays by clicking outside them (default off; never submits forms or triggers delete/pay/log-out style actions).
 - Mirrors hover effects (CSS `:hover` styling and JS-driven hover menus) between panes (default on).
 - Shows a virtual mouse cursor in the other pane where your mouse is, with a short ripple when you click (default on; display only, never clicks anything).
+- Alignment: pixel-exact (default) or on element/content.
+- Hold Alt (Option) to scroll one side on its own; the difference becomes the offset.
+- Syncs scrolling inside scroll areas (modals, side panels) and the zoom level (default on).
+- Optionally mirrors typing and form choices (default **off**).
+- Page checklist for live vs staging, with export.
+- Remembers pairs and reopens them as a Split View with one click.
+- Overlay mode: one side on top of the other with opacity, difference blend and a swipe divider.
+- Inspect CSS differences of the element under the cursor.
+- Shows the size of each pane and resizes the window to width presets.
+
+## New in 1.1.0 (second round)
+
+Version stays 1.1.0 (not yet published). The popup now has four tabs: **Sync · Checklist · Compare · Settings**; the status and Start/Stop button stay on top and the popup never grows past Chrome's 600 px limit (the tab content scrolls).
+
+### Page checklist (Checklist tab)
+
+- Paste many paths or URLs (one per line; for a URL only the path, query and `#` part are kept; other schemes are refused) or **Add current page**.
+- **Previous / Next** (and clicking a page in **All pages**) opens that path in both panes, each on its own pinned origin. Start sync once first so both sites are known; nothing navigates outside the two pinned origins. Both panes get a navigation lock, so navigation sync does not mirror the loads again.
+- Per page **Good / Wrong / N/A** and a note; progress (`3 of 12 checked · 1 wrong`); remove a page; **Clear list** (click twice).
+- **Export CSV** (UTF-8 with BOM, columns `#, Path, Result, Note, Left URL, Right URL`; cells starting with `= + - @` are prefixed with `'` so spreadsheets do not run them) and **Copy as text**.
+- Stored per pair of sites (order does not matter) in `chrome.storage.local`; max 500 pages per list, 50 lists.
+- The on-page panel shows a compact Checklist section (position, path, Previous/Next, result buttons) when the pair has a list.
+
+### Overlay (Compare tab)
+
+Lays an image of the other pane over this pane: opacity slider, **Difference blend** (identical pixels turn black) and a **Swipe divider** (drag the handle on the page, or use the arrow keys).
+
+How it works and what we found while building it (Chrome 157, real Split View):
+
+- `chrome.tabs.captureVisibleTab` captures only the **active** pane of the window (one pane's viewport, not the whole split). The extension therefore activates the other pane for a moment, captures it and re-activates the pane you were in (about 30 ms; keyboard focus returns). Its own UI in the captured pane (button, cursor, rulers) is hidden during the capture.
+- `captureVisibleTab` does **not** accept the `http://*/*` / `https://*/*` host permissions: it needs `<all_urls>` or `activeTab` ("Either the '<all_urls>' or 'activeTab' permission is required"). `activeTab` only covers the pane you clicked in, so `<all_urls>` is an **optional** host permission, requested the first time you press **Allow capturing the panes**. Nothing changes at install time.
+- Chrome allows at most 2 captures per second, so the image is refreshed 450 ms after scrolling, a scroll-area scroll, zoom, resize or a page load settles (throttled to one per 600 ms). In between, the image follows your scrolling.
+- The iframe alternative (load the other site in an iframe and strip `X-Frame-Options` / CSP `frame-ancestors` with `declarativeNetRequest`) was not needed; it would have cost an extra permission and a heavier store review.
+- The image only goes to the other pane of the same pair while both panes are on their pinned origins, is drawn in a closed shadow root with `pointer-events: none` (the page stays usable) and is never stored. Overlay turns off when sync stops or pauses.
+
+### Inspect CSS differences (Compare tab, on-page panel, shortcut)
+
+Turn on **Inspect differences** and point at an element: it is outlined, the matching element on the other side gets a dashed outline, and a small panel lists the checked properties that differ (font family/size/weight/style, line height, letter spacing, text align/transform/decoration, colour, background colour, margin, padding, border width/radius, display, position, box sizing, opacity, box shadow, gap, flex direction, justify/align, z-index) and both box sizes. Click freezes the selection (the click does not reach the page while inspecting), **Esc** stops. Only style values and box sizes of the two elements are exchanged, only while the mode is on.
+
+### Pane sizes and width presets (Compare tab)
+
+Shows width × height of both panes (also next to the Left/Right reload columns in the on-page panel). Presets **375 / 768 / 1024 / 1280 / 1440** for the chosen pane. Chrome has no API to move the Split View divider (`chrome.tabs` gained `createSplit`/`unsplit` in Chrome 155, nothing sets the ratio), so the window is resized with `chrome.windows.update` until the pane has that width; the other pane changes along. A maximized/fullscreen window is made normal first; if the screen is too narrow the popup says how wide the pane got.
+
+### History of pairs (Sync tab)
+
+Every pair you start sync for is remembered (origin and path of both panes; query string and `#` part are dropped): recent pairs (20) and pinned favourites (30), rename, remove, **Clear history** (keeps favourites) and an option **Remember pairs** in Settings. Click a pair to reopen it:
+
+- Active tab already in a Split View → both URLs are loaded into that pair.
+- Otherwise two tabs open next to each other and become a native Split View with `chrome.tabs.createSplit` (Chrome 155+; no extra permission).
+- Chrome 140–154 has no API to create a Split View: the two tabs open next to each other with a short instruction to turn them into one.
+- Sync starts (and pins the new origins) as soon as both pages have loaded.
+
+### Hold Alt (Option) = decouple
+
+While Alt (Option on macOS) is held, scrolling one pane is not mirrored. Release Alt and the new distance between the panes becomes the pair's scroll offset (toast: *Offset +120 px*). Alt is read from trusted key, wheel and pointer events (so it also works in the pane under the mouse that has no keyboard focus); nothing is blocked, so Alt shortcuts keep working.
+
+### Alignment: pixel-exact or on element/content
+
+Per pair and as a default. **On element/content** finds the top-most visible landmark element (id, heading, section, image, paragraph, ...) in the scrolling pane, matches it on the other side with the same descriptor matching as clicks/hover and puts it at the same spot (plus the offset). No match: falls back to the scroll percentage. Useful when a banner or extra content makes one page taller.
+
+### Sync scroll areas and zoom
+
+- **Sync scroll areas** (default on): scrolling inside an overflow area, modal or side panel scrolls the matching scrollable element on the other side (descriptor + class hint, closest to the same spot).
+- **Sync zoom** (default on): zooming one pane (Ctrl/⌘ + / −) gives the other pane the same zoom factor via `chrome.tabs.setZoom` (no extra permission); the factor we set is remembered so the change does not bounce back. Note that Chrome's zoom is per site by default, so other tabs of that site follow too.
+
+### Sync typing (default off)
+
+Mirrors what you type into inputs, textareas and contenteditable areas, and checkbox, radio and select changes, into the matching field on the other side. Never password, one-time-code, payment card (`autocomplete="cc-*"`), hidden, file or button inputs, nor fields whose name/label looks sensitive; only trusted events; values are set directly with `input`/`change` events, so nothing is clicked, no key is pressed and forms are never submitted. **The other site receives what you type**, which is why it is off by default.
 
 ## Changes in 1.1.0
 
@@ -172,9 +240,12 @@ splitview-browser-sync/
 
 ## Toolbar popup
 
-Click the extension icon in Chrome's toolbar to open a small settings popup.
+Click the extension icon in Chrome's toolbar to open the popup. The status of the current pair and the **Start sync / Stop sync** button are always on top; below are four tabs:
 
-The popup shows the status of the current pair, a **Start sync / Stop sync** button, the options for the current pair (**This Split View**), and two collapsible sections described below.
+- **Sync**: options for the current pair (**This Split View**), Add ruler, show/hide the on-page button, and **Recent pairs**.
+- **Checklist**: the page checklist for this pair of sites.
+- **Compare**: pane sizes and width presets, **Inspect differences**, **Overlay**.
+- **Settings**: defaults for new Split Views, **Remember pairs**, on-page button.
 
 ### Always show button on split screen (On-page button → Show in every Split View)
 
@@ -200,6 +271,10 @@ split screen pairing begins with your preferred configuration:
 - Mirror clicks (default off)
 - Mirror hover effects (default on)
 - Show mouse cursor (default on)
+- Alignment (default pixel-exact)
+- Sync scroll areas (default on)
+- Sync zoom (default on)
+- Sync typing (default off)
 
 These defaults are applied when a split screen pairing is first detected. They
 do not retroactively change a pairing that already exists in the current
@@ -219,11 +294,11 @@ The floating UI does not appear on normal pages outside Split View.
 
 ## Scroll sync
 
-Scroll sync is pixel-based and direct:
+Scroll sync is pixel-based and direct (in the default *Pixel-exact* alignment):
 
 - no smooth scroll;
 - no delayed easing;
-- no percentage mode;
+- no percentage mode (only *On element/content* alignment falls back to a percentage when no element matches);
 - exact `scrollLeft` and `scrollTop` values are used;
 - site CSS such as `html { scroll-behavior: smooth; }` is temporarily overridden during remote scroll.
 
@@ -394,6 +469,7 @@ Default: on for new pairs. Toggle: **Show mouse cursor** (per Split View group, 
 | `sync-all-split-views` | `Alt+Shift+A` | Start sync for all valid Split Views in the current window |
 | `stop-current-split-view` | `Alt+Shift+X` | Stop sync for the current Split View |
 | `hard-reload-active-pane` | `Alt+Shift+R` | Hard reload the active pane |
+| `toggle-inspect` | none (Chrome allows 4 suggested keys) | Inspect CSS differences on or off |
 
 You can change shortcuts at:
 
@@ -480,6 +556,19 @@ chrome://extensions/shortcuts
 - [ ] The cursor hides after about 1.5 s without movement, when the mouse leaves the pane or window, and when sync stops or pauses.
 - [ ] A click shows a short ripple on the other side, also with Mirror clicks off.
 - [ ] Turning the option off removes the cursor immediately.
+
+### Second round (checklist, overlay, inspector, ...)
+
+- [ ] Popup: four tabs, arrow keys switch tabs, height never above 600 px (synced state, Checklist with a long list), NL and EN, light and dark.
+- [ ] Hold Alt/Option and scroll one pane: the other stays; release: toast *Offset ... px*, popup shows the offset, both panes scroll together again. Alt+arrow/Alt shortcuts of the browser still work.
+- [ ] Alignment *On element/content*: open live vs a staging page with an extra banner; headings stay aligned while scrolling; with no match it follows the percentage.
+- [ ] Scroll a side panel/modal list on one side: the same list scrolls on the other side. Zoom one side with Ctrl/⌘ +: the other follows, no flicker loop.
+- [ ] Sync typing (turn on): text, textarea, contenteditable, checkbox, radio, select follow; password, card number, one-time code and file fields do not; nothing is submitted.
+- [ ] Checklist: paste paths and URLs, Previous/Next opens both panes on their own site and sync stays on; statuses, note, progress, CSV opens in Excel/Numbers with correct columns, Copy as text.
+- [ ] Recent pairs: Start sync adds the pair; rename, pin, remove; reopen inside the current Split View and from a normal tab (new Split View, sync starts).
+- [ ] Overlay: *Allow capturing the panes* shows Chrome's permission prompt; overlay over left/right, opacity, difference, swipe (drag + arrow keys); image refreshes after scrolling; no visible flicker when the other pane is captured; turning sync off removes it.
+- [ ] Inspect differences: outlines on both sides, panel lists differing CSS, click freezes, Esc stops, links are not followed while inspecting.
+- [ ] Pane sizes shown; presets resize the window so the chosen pane has that width (or report the screen is too narrow).
 
 ### Multiple Split View pairs
 
