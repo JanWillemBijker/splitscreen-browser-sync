@@ -104,6 +104,7 @@ const MSG = Object.freeze({
   POPUP_OVERLAY_REFRESH: 'SVSS_POPUP_OVERLAY_REFRESH',
   OVERLAY_IMAGE: 'SVSS_OVERLAY_IMAGE',
   CAPTURE_HIDE_UI: 'SVSS_CAPTURE_HIDE_UI',
+  CAPTURE_READY: 'SVSS_CAPTURE_READY',
   CAPTURE_RESTORE_UI: 'SVSS_CAPTURE_RESTORE_UI',
   POPUP_HISTORY_GET: 'SVSS_POPUP_HISTORY_GET',
   POPUP_HISTORY_OPEN: 'SVSS_POPUP_HISTORY_OPEN',
@@ -1027,6 +1028,16 @@ async function captureOverlay(groupKey) {
     const [source, targetScroll] = await Promise.all([readViewport(sourceTabId), getCurrentScroll(targetTabId)]);
     if (!source?.size || !targetScroll) return;
     const [active] = await chrome.tabs.query({ active: true, windowId: group.windowId });
+    // Only while the pair is what the window shows; never activate a pane
+    // while the user is typing in the other one or holding Alt there.
+    if (!active || (active.id !== sourceTabId && active.id !== targetTabId)) return;
+    if (active.id === targetTabId) {
+      const ready = await Promise.race([safeSendMessage(targetTabId, { type: MSG.CAPTURE_READY }), sleepMs(300)]);
+      if (!ready?.ok || ready.busy) {
+        scheduleOverlayCapture(group, 1500);
+        return;
+      }
+    }
     uiHidden = true;
     await Promise.race([safeSendMessage(sourceTabId, { type: MSG.CAPTURE_HIDE_UI }), sleepMs(300)]);
     if (active && active.id !== sourceTabId) {
@@ -1034,7 +1045,12 @@ async function captureOverlay(groupKey) {
       await chrome.tabs.update(sourceTabId, { active: true });
     }
     lastCaptureAt = Date.now();
-    const dataUrl = await chrome.tabs.captureVisibleTab(group.windowId, { format: 'png' });
+    // The image must show the source pane: check the active tab right before
+    // and right after the capture (the user could switch tabs in between).
+    const [before] = await chrome.tabs.query({ active: true, windowId: group.windowId });
+    const dataUrl = before?.id === sourceTabId ? await chrome.tabs.captureVisibleTab(group.windowId, { format: 'png' }) : null;
+    const [after] = await chrome.tabs.query({ active: true, windowId: group.windowId });
+    if (after?.id !== sourceTabId) return;
     if (restoreTabId) {
       await chrome.tabs.update(restoreTabId, { active: true }).catch(() => undefined);
       restoreTabId = null;
@@ -1163,7 +1179,7 @@ async function handleInspectClearMessage(sender) {
   const windowId = sender.tab?.windowId;
   if (typeof tabId !== 'number' || typeof windowId !== 'number') return;
   const group = await getGroupForTab(tabId, windowId);
-  if (!group) return;
+  if (!group || !group.enabled || !group.inspect) return;
   const targetTabId = getPeerTabId(group, tabId);
   if (targetTabId) await safeSendMessage(targetTabId, { type: MSG.REMOTE_INSPECT_CLEAR });
 }
@@ -1274,11 +1290,13 @@ async function rememberPair(group) {
   await saveHistory();
 }
 
-async function waitForTabsLoaded(tabIds, timeoutMs = 15000) {
+// Waits until every tab finished loading on its expected origin (the old
+// page can still report "complete" right after tabs.update).
+async function waitForTabsLoaded(tabIds, origins, timeoutMs = 15000) {
   const until = Date.now() + timeoutMs;
   while (Date.now() < until) {
     const tabs = await Promise.all(tabIds.map((id) => safeGetTab(id)));
-    if (tabs.every((tab) => tab && tab.status === 'complete' && isNormalHttpUrl(tab.url))) return true;
+    if (tabs.every((tab, i) => tab && tab.status === 'complete' && getOrigin(tab.url) === origins[i])) return true;
     if (tabs.some((tab) => !tab)) return false;
     await sleepMs(250);
   }
@@ -1312,7 +1330,7 @@ async function openHistoryEntry(id) {
       chrome.tabs.update(group.leftTabId, { url: leftUrl }),
       chrome.tabs.update(group.rightTabId, { url: rightUrl })
     ]);
-    startSyncWhenLoaded([group.leftTabId, group.rightTabId], group.leftTabId, group.windowId);
+    startSyncWhenLoaded([group.leftTabId, group.rightTabId], group.leftTabId, group.windowId, [entry.left.origin, entry.right.origin]);
     return { ok: true, mode: 'reused' };
   }
 
@@ -1326,14 +1344,14 @@ async function openHistoryEntry(id) {
     debug('createSplit failed', error?.message || error);
     return { ok: true, mode: 'manual' };
   }
-  startSyncWhenLoaded([left.id, right.id], left.id, left.windowId);
+  startSyncWhenLoaded([left.id, right.id], left.id, left.windowId, [entry.left.origin, entry.right.origin]);
   return { ok: true, mode: 'created' };
 }
 
-function startSyncWhenLoaded(tabIds, sourceTabId, windowId) {
+function startSyncWhenLoaded(tabIds, sourceTabId, windowId, origins) {
   (async () => {
     await sleepMs(300);
-    if (!(await waitForTabsLoaded(tabIds))) return;
+    if (!(await waitForTabsLoaded(tabIds, origins))) return;
     await enableCurrentSplitView(sourceTabId, windowId);
   })().catch((error) => debug('start after reopen failed', error));
 }
@@ -1379,6 +1397,7 @@ const MAX_CHECKLIST_ITEMS = 500;
 const MAX_CHECKLISTS = 50;
 const MAX_PATH_LENGTH = 2000;
 const MAX_NOTE_LENGTH = 1000;
+const MAX_CHECKLISTS_BYTES = 4 * 1024 * 1024;
 const CHECK_STATUSES = new Set(['ok', 'fail', 'na']);
 
 let checklistsCache = null;
@@ -1428,6 +1447,11 @@ function scheduleSaveChecklists() {
     // Keep the most recently used lists only.
     const keys = Object.keys(lists).sort((a, b) => (lists[b].updatedAt || 0) - (lists[a].updatedAt || 0));
     for (const key of keys.slice(MAX_CHECKLISTS)) delete lists[key];
+    // Stay well inside the storage.local quota: drop the oldest lists first.
+    while (Object.keys(lists).length > 1 && JSON.stringify(lists).length > MAX_CHECKLISTS_BYTES) {
+      const oldest = Object.keys(lists).sort((a, b) => (lists[a].updatedAt || 0) - (lists[b].updatedAt || 0))[0];
+      delete lists[oldest];
+    }
     try {
       await chrome.storage.local.set({ [CHECKLISTS_KEY]: lists });
     } catch (error) {
@@ -1581,7 +1605,7 @@ async function handlePopupChecklistMessage(message) {
     if (!list) return checklistResponse(group);
     const paths = message.type === MSG.POPUP_CHECKLIST_ADD
       ? String(message.text || '').slice(0, 200000).split(/[\r\n]+/).slice(0, MAX_CHECKLIST_ITEMS)
-      : [activeTab?.url];
+      : [pageKeyOf(activeTab?.url)?.path];
     const added = addChecklistPaths(list, paths);
     scheduleSaveChecklists();
     await sendGroupState(group);
@@ -1592,16 +1616,19 @@ async function handlePopupChecklistMessage(message) {
   if (!list) return checklistResponse(group);
   const index = Number(message.index);
 
-  if (message.type === MSG.POPUP_CHECKLIST_UPDATE && Number.isInteger(index) && list.items[index]) {
+  if (message.type === MSG.POPUP_CHECKLIST_UPDATE && Number.isInteger(index) && list.items[index]
+    && (typeof message.path !== 'string' || list.items[index].path === message.path)) {
     const item = list.items[index];
     if (message.status === null || CHECK_STATUSES.has(message.status)) item.status = message.status;
     if (typeof message.note === 'string') item.note = message.note.slice(0, MAX_NOTE_LENGTH);
     list.updatedAt = Date.now();
     scheduleSaveChecklists();
     await sendGroupState(group);
-  } else if (message.type === MSG.POPUP_CHECKLIST_REMOVE && Number.isInteger(index) && list.items[index]) {
+  } else if (message.type === MSG.POPUP_CHECKLIST_REMOVE && Number.isInteger(index) && list.items[index]
+    && (typeof message.path !== 'string' || list.items[index].path === message.path)) {
     list.items.splice(index, 1);
-    if (list.index >= list.items.length || index < list.index) list.index = Math.max(-1, list.index - 1);
+    if (index === list.index) list.index = -1;
+    else if (index < list.index) list.index -= 1;
     list.updatedAt = Date.now();
     scheduleSaveChecklists();
     await sendGroupState(group);
@@ -1809,6 +1836,8 @@ function sanitizeDescriptor(raw) {
     tag: typeof d.tag === 'string' ? d.tag.slice(0, 40) : null,
     candidates: candidates
       .filter((c) => c && typeof c === 'object' && ['css', 'hrefPath', 'text'].includes(c.type) && typeof c.value === 'string')
+      // Selectors come from page markup; refuse the expensive :has().
+      .filter((c) => c.type !== 'css' || !/:has\(/i.test(c.value))
       .map((c) => ({
         type: c.type,
         value: c.value.slice(0, MAX_DESCRIPTOR_VALUE),
@@ -2580,8 +2609,28 @@ async function handleFieldInputMessage(sender, message) {
 // When one pane of a syncing pair is zoomed, the other pane gets the same
 // zoom factor. The factor we set is remembered so the resulting
 // onZoomChange of the other pane does not bounce back (no loop).
+// tabId -> [{ factor, until }]: every factor we set recently, so fast
+// Ctrl+/Ctrl- steps (several events in flight) are all recognised.
 const expectedZoom = new Map();
 const ZOOM_EPSILON = 0.001;
+const ZOOM_EXPECT_MS = 1500;
+
+function expectZoom(tabId, factor) {
+  const now = Date.now();
+  const list = (expectedZoom.get(tabId) || []).filter((entry) => entry.until > now);
+  list.push({ factor, until: now + ZOOM_EXPECT_MS });
+  expectedZoom.set(tabId, list);
+}
+
+function takeExpectedZoom(tabId, factor) {
+  const now = Date.now();
+  const list = (expectedZoom.get(tabId) || []).filter((entry) => entry.until > now);
+  const index = list.findIndex((entry) => Math.abs(entry.factor - factor) < ZOOM_EPSILON);
+  if (index >= 0) list.splice(index, 1);
+  if (list.length) expectedZoom.set(tabId, list);
+  else expectedZoom.delete(tabId);
+  return index >= 0;
+}
 
 async function applyZoomToPeer(group, sourceTabId, factor) {
   const peerTabId = getPeerTabId(group, sourceTabId);
@@ -2589,24 +2638,20 @@ async function applyZoomToPeer(group, sourceTabId, factor) {
   let current = null;
   try { current = await chrome.tabs.getZoom(peerTabId); } catch (_error) { return; }
   if (Math.abs(current - factor) < ZOOM_EPSILON) return;
-  expectedZoom.set(peerTabId, factor);
-  setTimeout(() => {
-    if (expectedZoom.get(peerTabId) === factor) expectedZoom.delete(peerTabId);
-  }, 2000);
+  expectZoom(peerTabId, factor);
   try {
     await chrome.tabs.setZoom(peerTabId, factor);
   } catch (error) {
-    expectedZoom.delete(peerTabId);
+    takeExpectedZoom(peerTabId, factor);
     debug('tabs.setZoom failed', peerTabId, error?.message || error);
   }
 }
 
 async function handleZoomChange(tabId, newZoomFactor) {
-  const expected = expectedZoom.get(tabId);
-  if (expected !== undefined && Math.abs(expected - newZoomFactor) < ZOOM_EPSILON) {
-    expectedZoom.delete(tabId);
-    return;
-  }
+  if (takeExpectedZoom(tabId, newZoomFactor)) return;
+  // A change that is not ours while ours are still in flight: let the other
+  // pane settle first instead of fighting it.
+  if (expectedZoom.has(tabId)) return;
   const state = await getState();
   const group = state.groups[state.tabToGroupKey[String(tabId)]];
   if (!group || !group.enabled || !group.syncZoom) return;

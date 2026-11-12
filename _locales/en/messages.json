@@ -549,9 +549,6 @@
   "btnSave": {
     "message": "Save"
   },
-  "btnCancel": {
-    "message": "Cancel"
-  },
   "sectionOverlay": {
     "message": "Overlay"
   },

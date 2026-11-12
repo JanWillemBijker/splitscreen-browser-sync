@@ -385,7 +385,7 @@ $('overlayOn').addEventListener('change', () => {
 });
 
 for (const radio of document.querySelectorAll('input[name="overlaySide"]')) {
-  radio.addEventListener('change', () => setOverlay({ side: radio.value, on: true }));
+  radio.addEventListener('change', () => setOverlay({ side: radio.value }));
 }
 
 $('overlayOpacity').addEventListener('input', () => {
@@ -472,6 +472,7 @@ function renderHistory(data) {
         event.preventDefault();
         renamingId = null;
         renderHistory(await sendMessage({ type: MSG.POPUP_HISTORY_UPDATE, id: entry.id, name: input.value }));
+        focusHistoryItem(entry.id);
       });
       input.addEventListener('keydown', (event) => {
         if (event.key !== 'Escape') return;
@@ -479,6 +480,7 @@ function renderHistory(data) {
         event.stopPropagation();
         renamingId = null;
         renderHistory();
+        focusHistoryItem(entry.id);
       });
       li.appendChild(form);
       list.appendChild(li);
@@ -512,9 +514,16 @@ function renderHistory(data) {
     const remove = iconButton(ICONS.cross, t('historyDelete'), async () => {
       renderHistory(await sendMessage({ type: MSG.POPUP_HISTORY_DELETE, id: entry.id }));
     });
+    li.dataset.id = entry.id;
+    rename.dataset.role = 'rename';
     li.append(open, pin, rename, remove);
     list.appendChild(li);
   }
+}
+
+function focusHistoryItem(id) {
+  const item = Array.from(document.querySelectorAll('.hist-item')).find((li) => li.dataset.id === id);
+  item?.querySelector('[data-role="rename"]')?.focus();
 }
 
 async function openHistory(id) {
@@ -606,7 +615,7 @@ function renderChecklist(data) {
     const li = document.createElement('li');
     li.className = 'check-item';
     li.dataset.index = String(i);
-    if (i === index) li.setAttribute('aria-current', 'true');
+    if (i === index) li.setAttribute('aria-current', 'step');
     const dot = document.createElement('span');
     dot.className = 'check-dot';
     if (item.status) dot.dataset.status = item.status;
@@ -627,7 +636,7 @@ function renderChecklist(data) {
     remove.dataset.role = 'remove';
     remove.setAttribute('aria-label', t('checklistRemove', [item.path]));
     remove.appendChild(crossIcon());
-    remove.addEventListener('click', () => checklistCall({ type: MSG.POPUP_CHECKLIST_REMOVE, index: i }));
+    remove.addEventListener('click', () => checklistCall({ type: MSG.POPUP_CHECKLIST_REMOVE, index: i, path: item.path }));
     li.append(dot, open, remove);
     list.appendChild(li);
   });
@@ -673,17 +682,18 @@ for (const chip of document.querySelectorAll('#checklistStatus .chip')) {
     const item = checklist?.items?.[index];
     if (!item) return;
     const status = item.status === chip.dataset.status ? null : chip.dataset.status;
-    checklistCall({ type: MSG.POPUP_CHECKLIST_UPDATE, index, status });
+    checklistCall({ type: MSG.POPUP_CHECKLIST_UPDATE, index, path: item.path, status });
   });
 }
 
 $('checklistNote').addEventListener('input', () => {
   if (noteTimer) clearTimeout(noteTimer);
   const index = currentChecklistIndex();
+  const path = checklist?.items?.[index]?.path;
   const note = $('checklistNote').value;
   noteTimer = setTimeout(() => {
     noteTimer = null;
-    checklistCall({ type: MSG.POPUP_CHECKLIST_UPDATE, index, note });
+    checklistCall({ type: MSG.POPUP_CHECKLIST_UPDATE, index, path, note });
   }, 400);
 });
 

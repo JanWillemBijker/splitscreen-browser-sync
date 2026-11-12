@@ -52,6 +52,7 @@
     INSPECT_CLEAR: 'SVSS_INSPECT_CLEAR',
     REMOTE_INSPECT_CLEAR: 'SVSS_REMOTE_INSPECT_CLEAR',
     CAPTURE_HIDE_UI: 'SVSS_CAPTURE_HIDE_UI',
+    CAPTURE_READY: 'SVSS_CAPTURE_READY',
     CAPTURE_RESTORE_UI: 'SVSS_CAPTURE_RESTORE_UI',
     GET_VIEWPORT: 'SVSS_GET_VIEWPORT',
     REMOTE_FIELD_INPUT: 'SVSS_REMOTE_FIELD_INPUT'
@@ -1850,9 +1851,10 @@
   }
 
   function isInsideExtensionUi(event) {
-    if (!host) return false;
     const path = event.composedPath ? event.composedPath() : [];
-    return path.includes(host);
+    if (host && path.includes(host)) return true;
+    for (const extra of ourExtraHosts) if (path.includes(extra)) return true;
+    return false;
   }
 
   // The selector used to find the "activatable" element so the mirrored side
@@ -2377,6 +2379,8 @@
   const SENSITIVE_NAME = /(pass(word|wd)?|pwd|secret|token|otp|cvc|cvv|card.?num|cc.?(num|exp|csc)|iban|security.?code|pincode|passcode|verification|2fa|mfa|totp)/i;
   // Short words matched as a whole token only (so "shipping" is not a PIN).
   const SENSITIVE_TOKEN = /(^|[^a-z0-9])(pin|ssn|bsn|sofi|code|auth|tan)([^a-z0-9]|$)/i;
+  // Visible label wording (EN + NL) for card numbers, codes and passwords.
+  const SENSITIVE_LABEL = /(card\s*number|credit\s*card|kaartnummer|creditcard|wachtwoord|pincode|beveiligingscode|verificatiecode|inlogcode|one[\s-]*time|eenmalig)/i;
 
   function isSensitiveField(element) {
     if (!(element instanceof Element)) return false;
@@ -2385,11 +2389,24 @@
     const type = (field.getAttribute('type') || '').toLowerCase();
     if (type === 'password') return true;
     if (SENSITIVE_AUTOCOMPLETE.test(field.getAttribute('autocomplete') || '')) return true;
+    // Single-character numeric boxes are one-time-code digits.
+    const maxLength = Number(field.getAttribute('maxlength'));
+    const inputMode = (field.getAttribute('inputmode') || '').toLowerCase();
+    if (maxLength > 0 && maxLength <= 1 && (inputMode === 'numeric' || type === 'number' || type === 'tel')) return true;
+    const labelTexts = [];
+    try {
+      for (const label of Array.from(field.labels || [])) labelTexts.push(label.textContent || '');
+    } catch (_error) {}
+    for (const id of (field.getAttribute('aria-labelledby') || '').split(/\s+/).filter(Boolean).slice(0, 5)) {
+      const labelEl = document.getElementById(id);
+      if (labelEl) labelTexts.push(labelEl.textContent || '');
+    }
     const hints = ['name', 'id', 'aria-label', 'placeholder', 'data-testid']
       .map((attr) => field.getAttribute(attr) || '')
+      .concat(labelTexts.map((text) => normalizeText(text).slice(0, 120)))
       .join(' ')
       .replace(/([a-z])([A-Z0-9])/g, '$1 $2'); // userPin -> user Pin
-    return SENSITIVE_NAME.test(hints) || SENSITIVE_TOKEN.test(hints);
+    return SENSITIVE_NAME.test(hints) || SENSITIVE_TOKEN.test(hints) || SENSITIVE_LABEL.test(hints);
   }
 
   function sanitizeRulers(list) {
@@ -2515,9 +2532,14 @@
     pendingFieldEvents.clear();
   }
 
+  // Set while a mirrored value is applied: execCommand('insertText') fires
+  // trusted input events, which must not be sent back.
+  let applyingRemoteField = false;
+
   function handleLocalFieldEvent(event) {
     if (!uiState.enabled || !uiState.syncInput) return;
     if (!event.isTrusted) return;            // our own replays are untrusted: no echo
+    if (applyingRemoteField) return;
     if (isInsideExtensionUi(event) || isInsideRulerUi(event)) return;
     let element = event.target instanceof Element ? event.target : null;
     if (element?.isContentEditable) element = editingHostOf(element);
@@ -2596,21 +2618,27 @@
       // Replace the text through the editing pipeline when possible so
       // editors notice it; plain text only, never HTML.
       let done = false;
+      applyingRemoteField = true;
+      const selection = window.getSelection();
+      const saved = selection && selection.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
       try {
-        const selection = window.getSelection();
         const range = document.createRange();
         range.selectNodeContents(element);
         selection.removeAllRanges();
         selection.addRange(range);
         done = document.execCommand('insertText', false, payload.value);
-        selection.removeAllRanges();
       } catch (_error) {
         done = false;
       }
+      try {
+        selection.removeAllRanges();
+        if (saved && saved.startContainer.isConnected) selection.addRange(saved);
+      } catch (_error) {}
       if (!done) {
         element.textContent = payload.value;
         announceFieldChange(element, 'input');
       }
+      applyingRemoteField = false;
     }
   }
 
@@ -4013,8 +4041,9 @@
     if (inspectPeerEl) placeBox(inspectPeerBox, inspectPeerTag, inspectPeerEl, inspectPeerTag.textContent);
   }
 
-  function handleInspectLeave() {
+  function handleInspectLeave(event) {
     if (!inspectOn() || inspectFrozen) return;
+    if (!event?.isTrusted || event.target !== document.documentElement) return;
     inspectEl = null;
     inspectLocal = null;
     if (inspectBox) inspectBox.style.display = 'none';
@@ -4154,6 +4183,15 @@
       return true;
     }
 
+    if (message.type === MSG.CAPTURE_READY) {
+      // Capturing the other pane briefly moves keyboard focus there; not
+      // while the user types here or holds Alt.
+      const active = document.activeElement;
+      const typing = Boolean(active && active !== document.body && (isTextLikeInput(active) || active.tagName === 'SELECT' || active.isContentEditable));
+      sendResponse({ ok: true, busy: typing || altDecoupled });
+      return false;
+    }
+
     if (message.type === MSG.CAPTURE_RESTORE_UI) {
       setOwnUiHiddenForCapture(false);
       sendResponse({ ok: true });
@@ -4286,7 +4324,9 @@
   document.addEventListener('pointerdown', trackAltFromPointer, { capture: true, passive: true });
   window.addEventListener('keydown', trackAltFromKey, true);
   window.addEventListener('keyup', trackAltFromKey, true);
-  window.addEventListener('blur', () => setAltDecoupled(false), true);
+  window.addEventListener('blur', (event) => {
+    if (event.isTrusted) setAltDecoupled(false);
+  }, true);
   document.addEventListener('click', handleLocalClick, true);
   document.addEventListener('focusin', handleLocalFocusIn, true);
   document.addEventListener('input', handleLocalFieldEvent, true);
