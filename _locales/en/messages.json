@@ -265,5 +265,17 @@
   },
   "altHint": {
     "message": "Tip: hold Alt (Option) while scrolling to move one side on its own; the difference becomes the offset."
+  },
+  "optAlign": {
+    "message": "Alignment"
+  },
+  "optAlignHelp": {
+    "message": "Pixel-exact copies the scroll position. On element/content keeps the same section at the top when the pages differ in height."
+  },
+  "alignPixel": {
+    "message": "Pixel-exact"
+  },
+  "alignElement": {
+    "message": "On element/content"
   }
 }

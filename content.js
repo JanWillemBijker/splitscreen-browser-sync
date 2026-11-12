@@ -61,7 +61,8 @@
     SET_NAVIGATION_SYNC: 'SET_NAVIGATION_SYNC',
     SET_CLICK_MIRRORING: 'SET_CLICK_MIRRORING',
     SET_HOVER_MIRRORING: 'SET_HOVER_MIRRORING',
-    SET_SHOW_CURSOR: 'SET_SHOW_CURSOR'
+    SET_SHOW_CURSOR: 'SET_SHOW_CURSOR',
+    SET_ALIGN_MODE: 'SET_ALIGN_MODE'
   });
 
   const HOST_ID = 'svss-root';
@@ -399,6 +400,19 @@
     .svss-switch:checked { background: var(--switch-on); }
     .svss-switch:checked::after { transform: translateX(14px); }
 
+.svss-select {
+      flex: none;
+      max-width: 150px;
+      height: 30px;
+      padding: 4px 8px;
+      border: 1px solid var(--line-strong);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--ink);
+      font: inherit;
+      font-size: 12px;
+    }
+
     .svss-offset-row {
       display: grid;
       grid-template-columns: 1fr auto auto;
@@ -537,6 +551,10 @@
   let dragStartRulerY = 0;
   let rulerDragY = 0;
   let rulerDragRafPending = false;
+
+  // Hosts of later features (overlay, inspector, ...) register here so
+  // element lookups never pick our own UI.
+  const ourExtraHosts = new Set();
 
   let wpAdminObserver = null;
   let wpAdminMutationRaf = false;
@@ -755,6 +773,37 @@
     return toggle;
   }
 
+  // A labelled native <select>; changes are sent as a panel command.
+  function createSelect(label, value, choices, command) {
+    const row = document.createElement('label');
+    row.className = 'svss-toggle';
+    const text = document.createElement('span');
+    text.className = 'svss-toggle-text';
+    text.textContent = label;
+    const select = document.createElement('select');
+    select.className = 'svss-select';
+    select.dataset.key = command;
+    for (const [optionValue, optionLabel] of choices) {
+      const option = document.createElement('option');
+      option.value = optionValue;
+      option.textContent = optionLabel;
+      select.appendChild(option);
+    }
+    select.value = value;
+    select.addEventListener('keydown', (event) => event.stopPropagation());
+    select.addEventListener('change', async (event) => {
+      event.stopPropagation();
+      if (!isTrustedUiEvent(event)) {
+        select.value = value;
+        return;
+      }
+      await sendUiCommand(event, command, { value: select.value });
+    });
+    row.appendChild(text);
+    row.appendChild(select);
+    return row;
+  }
+
   // Maps the background state to one of: synced, paused, reloading, error.
   function getPanelStatus() {
     if (uiState.color === 'red') return 'error';
@@ -830,6 +879,10 @@
     panel.appendChild(syncRow);
 
     const optionsSection = createSection(t('sectionOptions', 'Options'));
+    optionsSection.appendChild(createSelect(t('optAlign', 'Alignment'), uiState.alignMode === 'element' ? 'element' : 'pixel', [
+      ['pixel', t('alignPixel', 'Pixel-exact')],
+      ['element', t('alignElement', 'On element/content')]
+    ], CMD.SET_ALIGN_MODE));
     optionsSection.appendChild(createToggle(t('optNavigation', 'Sync navigation'), uiState.syncNavigation, CMD.SET_NAVIGATION_SYNC));
     optionsSection.appendChild(createToggle(t('optClicks', 'Mirror clicks'), uiState.mirrorClicks, CMD.SET_CLICK_MIRRORING));
     optionsSection.appendChild(createToggle(t('optHover', 'Mirror hover effects'), uiState.mirrorHover, CMD.SET_HOVER_MIRRORING));
@@ -1312,8 +1365,120 @@
       lastSentScrollX = scrollX;
       lastSentScrollY = scrollY;
 
-      await sendRuntimeMessage({ type: MSG.SCROLL, scrollX, scrollY, timestamp: Date.now() });
+      const anchor = uiState.alignMode === 'element' ? buildScrollAnchor() : null;
+      await sendRuntimeMessage({ type: MSG.SCROLL, scrollX, scrollY, anchor, timestamp: Date.now() });
     });
+  }
+
+  // ---- Alignment "on element/content" ------------------------------------------
+  // The source pane picks the top-most visible, non-fixed element that is a
+  // good landmark (id, heading, section, image, paragraph, ...) and sends its
+  // descriptor, how far the viewport top is below that element's top, and the
+  // scroll percentage. The other pane finds the matching element (same
+  // descriptor matching as clicks/hover) and puts it at the same spot, or
+  // falls back to the percentage.
+  const ANCHOR_TAGS = /^(h[1-6]|section|article|header|footer|main|aside|figure|img|picture|video|table|form|ul|ol|li|p|blockquote|pre|dl)$/;
+  const anchorDescriptorCache = new WeakMap();
+
+  function isOurHost(node) {
+    return Boolean(node) && (node === host || node === rulerHost || node === cursorHost || ourExtraHosts.has(node));
+  }
+
+  function isFixedLike(element) {
+    try {
+      const position = getComputedStyle(element).position;
+      return position === 'fixed' || position === 'sticky';
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  function pickAnchorElement() {
+    const vw = window.innerWidth || 0;
+    const vh = window.innerHeight || 0;
+    if (!vw || !vh) return null;
+    const probes = [[0.5, 0.1], [0.5, 0.25], [0.3, 0.25], [0.7, 0.25], [0.5, 0.45]];
+    for (const [fx, fy] of probes) {
+      let element = null;
+      try { element = document.elementFromPoint(vw * fx, vh * fy); } catch (_error) { element = null; }
+      if (!(element instanceof Element) || isOurHost(element)) continue;
+      let candidate = null;
+      let fixed = false;
+      for (let node = element; node && node !== document.body && node !== document.documentElement; node = node.parentElement) {
+        if (isFixedLike(node)) { fixed = true; break; }
+        if (!candidate && (node.id || ANCHOR_TAGS.test(node.tagName.toLowerCase()))) {
+          const rect = node.getBoundingClientRect();
+          if (rect.height > 0 && rect.height < vh * 3) candidate = node;
+        }
+      }
+      if (fixed) continue;
+      if (candidate) return candidate;
+      if (element !== document.body && element !== document.documentElement) return element;
+    }
+    return null;
+  }
+
+  function buildScrollAnchor() {
+    const element = pickAnchorElement();
+    const scroller = document.scrollingElement || document.documentElement;
+    const max = Math.max(0, (scroller?.scrollHeight || 0) - (window.innerHeight || 0));
+    const ratio = max > 0 ? Math.max(0, Math.min(1, (scroller?.scrollTop || 0) / max)) : 0;
+    if (!element) return { candidates: [], ratio, delta: 0 };
+    let descriptor = anchorDescriptorCache.get(element);
+    if (!descriptor) {
+      descriptor = buildElementDescriptor(element);
+      anchorDescriptorCache.set(element, descriptor);
+    }
+    return { ...descriptor, delta: -element.getBoundingClientRect().top, ratio };
+  }
+
+  let lastAnchorKey = null;
+  let lastAnchorElement = null;
+
+  function documentTopOf(element) {
+    return element.getBoundingClientRect().top + (window.scrollY || 0);
+  }
+
+  // Strong descriptor match first, then the weak match whose position is
+  // closest to where the pixel position would put it.
+  function resolveAnchorElement(anchor, expectedTop) {
+    const candidates = Array.isArray(anchor?.candidates) ? anchor.candidates : [];
+    if (!candidates.length) return null;
+    const key = JSON.stringify(candidates);
+    if (key === lastAnchorKey && lastAnchorElement?.isConnected) return lastAnchorElement;
+
+    let found = firstDescriptorMatch(candidates, true);
+    if (!found) {
+      let bestDistance = Infinity;
+      for (const candidate of candidates) {
+        if (candidate.strong) continue;
+        for (const element of matchAllElements(candidate)) {
+          if (isOurHost(element)) continue;
+          const distance = Math.abs(documentTopOf(element) - expectedTop);
+          if (distance < bestDistance) { bestDistance = distance; found = element; }
+        }
+        if (found) break;
+      }
+    }
+    lastAnchorKey = key;
+    lastAnchorElement = found || null;
+    return lastAnchorElement;
+  }
+
+  function resolveAnchoredScrollY(message) {
+    const pixelY = Math.max(0, Number(message.targetScrollY) || 0);
+    if (message.alignMode !== 'element' || !message.anchor) return pixelY;
+    const anchor = message.anchor;
+    const sideOffset = Number(message.sideOffsetY) || 0;
+    const delta = Number(anchor.delta) || 0;
+    const element = resolveAnchorElement(anchor, pixelY - sideOffset - delta);
+    if (element) return Math.max(0, Math.round(documentTopOf(element) + delta + sideOffset));
+    if (typeof anchor.ratio === 'number') {
+      const scroller = document.scrollingElement || document.documentElement;
+      const max = Math.max(0, (scroller?.scrollHeight || 0) - (window.innerHeight || 0));
+      return Math.max(0, Math.round(anchor.ratio * max + sideOffset));
+    }
+    return pixelY;
   }
 
   function applyRemoteScroll(targetScrollX, targetScrollY) {
@@ -2877,12 +3042,13 @@
     }
 
     if (message.type === MSG.GET_SCROLL) {
-      sendResponse({ ok: true, ...readScrollPosition() });
+      const anchor = message.withAnchor ? buildScrollAnchor() : null;
+      sendResponse({ ok: true, ...readScrollPosition(), anchor });
       return false;
     }
 
     if (message.type === MSG.REMOTE_SCROLL) {
-      applyRemoteScroll(message.targetScrollX, message.targetScrollY);
+      applyRemoteScroll(message.targetScrollX, resolveAnchoredScrollY(message));
       sendResponse({ ok: true });
       return false;
     }

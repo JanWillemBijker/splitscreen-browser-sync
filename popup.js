@@ -7,6 +7,7 @@ const MSG = Object.freeze({
   POPUP_SHOW_BUTTON_CURRENT: 'SVSS_POPUP_SHOW_BUTTON_CURRENT',
   POPUP_SET_SYNC: 'SVSS_POPUP_SET_SYNC',
   POPUP_SET_GROUP_OPTION: 'SVSS_POPUP_SET_GROUP_OPTION',
+  POPUP_SET_GROUP_CHOICE: 'SVSS_POPUP_SET_GROUP_CHOICE',
   POPUP_RULER_ADD: 'SVSS_POPUP_RULER_ADD'
 });
 
@@ -23,6 +24,11 @@ const alwaysShow = $('alwaysShow');
 const showCurrent = $('showCurrent');
 const addRuler = $('addRuler');
 const groupOptionInputs = Array.from(document.querySelectorAll('[data-group-option]'));
+const groupChoiceInputs = Array.from(document.querySelectorAll('[data-group-choice]'));
+// Defaults with a fixed set of values (select elements).
+const defaultChoices = [
+  { el: $('defaultAlignMode'), key: 'defaultAlignMode', fallback: 'pixel' }
+];
 
 // Per-group option defaults applied to each new split screen pairing.
 // Each entry maps a checkbox element to the settings field that stores it.
@@ -157,6 +163,10 @@ function renderStatus(status) {
     el.checked = typeof value === 'boolean' ? value : fallbackOn;
   }
 
+  for (const { el, key, fallback } of defaultChoices) {
+    if (el) el.value = typeof settings[key] === 'string' ? settings[key] : fallback;
+  }
+
   const state = resolveState(status);
   const inSplit = Boolean(status?.isInValidSplitView);
   const group = status?.group || {};
@@ -182,6 +192,9 @@ function renderStatus(status) {
 
   for (const input of groupOptionInputs) {
     input.checked = Boolean(group[input.dataset.groupOption]);
+  }
+  for (const select of groupChoiceInputs) {
+    if (typeof group[select.dataset.groupChoice] === 'string') select.value = group[select.dataset.groupChoice];
   }
 
   showCurrent.disabled = !inSplit;
@@ -219,6 +232,19 @@ syncToggle.addEventListener('click', () => {
 for (const input of groupOptionInputs) {
   input.addEventListener('change', () => {
     run({ type: MSG.POPUP_SET_GROUP_OPTION, option: input.dataset.groupOption, value: input.checked });
+  });
+}
+
+for (const select of groupChoiceInputs) {
+  select.addEventListener('change', () => {
+    run({ type: MSG.POPUP_SET_GROUP_CHOICE, option: select.dataset.groupChoice, value: select.value });
+  });
+}
+
+for (const { el, key } of defaultChoices) {
+  if (!el) continue;
+  el.addEventListener('change', () => {
+    run({ type: MSG.POPUP_SET_DEFAULTS, defaults: { [key]: el.value } });
   });
 }
 

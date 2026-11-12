@@ -62,6 +62,16 @@
           </div>
 
           <div class="options">
+            <label class="option option-stack">
+              <span class="option-text">
+                <span class="option-label" data-i18n="optAlign"></span>
+                <span class="option-help" data-i18n="optAlignHelp"></span>
+              </span>
+              <select class="select" data-group-choice="alignMode">
+                <option value="pixel" data-i18n="alignPixel"></option>
+                <option value="element" data-i18n="alignElement"></option>
+              </select>
+            </label>
             <label class="option">
               <span class="option-text">
                 <span class="option-label" data-i18n="optNavigation"></span>
@@ -117,6 +127,13 @@
             <p class="group-help" data-i18n="sectionDefaultsHelp"></p>
           </div>
           <div class="options">
+            <label class="option">
+              <span class="option-text"><span class="option-label" data-i18n="optAlign"></span></span>
+              <select id="defaultAlignMode" class="select">
+                <option value="pixel" data-i18n="alignPixel"></option>
+                <option value="element" data-i18n="alignElement"></option>
+              </select>
+            </label>
             <label class="option">
               <span class="option-text"><span class="option-label" data-i18n="optNavigation"></span></span>
               <input id="defaultSyncNavigation" type="checkbox" class="switch">

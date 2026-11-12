@@ -265,5 +265,17 @@
   },
   "altHint": {
     "message": "Tip: houd Alt (Option) ingedrukt tijdens het scrollen om één kant los te bewegen; het verschil wordt de offset."
+  },
+  "optAlign": {
+    "message": "Uitlijning"
+  },
+  "optAlignHelp": {
+    "message": "Pixel-exact neemt de scrollpositie over. Op element/inhoud houdt dezelfde sectie bovenaan als de pagina's in hoogte verschillen."
+  },
+  "alignPixel": {
+    "message": "Pixel-exact"
+  },
+  "alignElement": {
+    "message": "Op element/inhoud"
   }
 }

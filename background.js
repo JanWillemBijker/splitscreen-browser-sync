@@ -15,6 +15,25 @@ const DEFAULT_MIRROR_HOVER = true;
 // it never triggers anything on the page, so it is on by default.
 const DEFAULT_SHOW_CURSOR = true;
 const PAUSE_ORIGIN_CHANGED = 'origin-changed';
+
+// Per-pair options added after 1.1.0, each with its default for new pairs:
+// [group field, settings field holding the default, built-in default,
+//  on-page panel command]. They share the plumbing below (settings, pair
+// defaults, UI state, popup whitelist, panel commands).
+const EXTRA_BOOL_OPTIONS = Object.freeze([]);
+
+// Per-pair options with a fixed set of values.
+const CHOICE_OPTIONS = Object.freeze({
+  // How the other pane is aligned: 'pixel' copies the scroll position,
+  // 'element' aligns on the top-most visible matching element (falls back to
+  // the scroll percentage when no element matches).
+  alignMode: { setting: 'defaultAlignMode', values: ['pixel', 'element'], fallback: 'pixel', command: 'SET_ALIGN_MODE' }
+});
+
+function choiceOr(name, value) {
+  const spec = CHOICE_OPTIONS[name];
+  return spec.values.includes(value) ? value : spec.fallback;
+}
 const DEFAULT_ALWAYS_SHOW_BUTTON = true;
 const SAVE_DEBOUNCE_MS = 150;
 const NAVIGATION_LOCK_MS = 1500;
@@ -46,6 +65,7 @@ const MSG = Object.freeze({
   POPUP_SHOW_BUTTON_CURRENT: 'SVSS_POPUP_SHOW_BUTTON_CURRENT',
   POPUP_SET_SYNC: 'SVSS_POPUP_SET_SYNC',
   POPUP_SET_GROUP_OPTION: 'SVSS_POPUP_SET_GROUP_OPTION',
+  POPUP_SET_GROUP_CHOICE: 'SVSS_POPUP_SET_GROUP_CHOICE',
   RULER_STATE: 'SVSS_RULER_STATE',
   RULER_MOVE: 'SVSS_RULER_MOVE',
   REMOTE_RULER_MOVE: 'SVSS_REMOTE_RULER_MOVE',
@@ -81,8 +101,15 @@ const CMD = Object.freeze({
   SET_NAVIGATION_SYNC: 'SET_NAVIGATION_SYNC',
   SET_CLICK_MIRRORING: 'SET_CLICK_MIRRORING',
   SET_HOVER_MIRRORING: 'SET_HOVER_MIRRORING',
-  SET_SHOW_CURSOR: 'SET_SHOW_CURSOR'
+  SET_SHOW_CURSOR: 'SET_SHOW_CURSOR',
+  SET_ALIGN_MODE: 'SET_ALIGN_MODE'
 });
+
+// Panel commands that set one of EXTRA_BOOL_OPTIONS / CHOICE_OPTIONS.
+const OPTION_COMMANDS = Object.freeze(Object.fromEntries([
+  ...EXTRA_BOOL_OPTIONS.map(([field, , , command]) => [command, { field, kind: 'bool' }]),
+  ...Object.entries(CHOICE_OPTIONS).map(([field, spec]) => [spec.command, { field, kind: 'choice' }])
+]));
 
 let stateCache = null;
 let statePromise = null;
@@ -126,7 +153,8 @@ const GESTURE_REQUIRED_COMMANDS = new Set([
   CMD.SET_NAVIGATION_SYNC,
   CMD.SET_CLICK_MIRRORING,
   CMD.SET_HOVER_MIRRORING,
-  CMD.SET_SHOW_CURSOR
+  CMD.SET_SHOW_CURSOR,
+  ...Object.keys(OPTION_COMMANDS)
 ]);
 
 const POPUP_GROUP_OPTIONS = Object.freeze({
@@ -134,7 +162,8 @@ const POPUP_GROUP_OPTIONS = Object.freeze({
   mirrorClicks: 'mirrorClicks',
   mirrorHover: 'mirrorHover',
   hideWpAdminBar: 'hideWpAdminBar',
-  showCursor: 'showCursor'
+  showCursor: 'showCursor',
+  ...Object.fromEntries(EXTRA_BOOL_OPTIONS.map(([field]) => [field, field]))
 });
 
 const SETTINGS_DEFAULT_FIELDS = Object.freeze([
@@ -142,7 +171,8 @@ const SETTINGS_DEFAULT_FIELDS = Object.freeze([
   'defaultSyncNavigation',
   'defaultMirrorClicks',
   'defaultMirrorHover',
-  'defaultShowCursor'
+  'defaultShowCursor',
+  ...EXTRA_BOOL_OPTIONS.map(([, setting]) => setting)
 ]);
 
 function t(key, substitutions) {
@@ -230,7 +260,9 @@ function normalizeSettings(raw) {
     defaultSyncNavigation: boolOr(settings.defaultSyncNavigation, DEFAULT_SYNC_NAVIGATION),
     defaultMirrorClicks: boolOr(settings.defaultMirrorClicks, DEFAULT_MIRROR_CLICKS),
     defaultMirrorHover: boolOr(settings.defaultMirrorHover, DEFAULT_MIRROR_HOVER),
-    defaultShowCursor: boolOr(settings.defaultShowCursor, DEFAULT_SHOW_CURSOR)
+    defaultShowCursor: boolOr(settings.defaultShowCursor, DEFAULT_SHOW_CURSOR),
+    ...Object.fromEntries(EXTRA_BOOL_OPTIONS.map(([, setting, fallback]) => [setting, boolOr(settings[setting], fallback)])),
+    ...Object.fromEntries(Object.entries(CHOICE_OPTIONS).map(([name, spec]) => [spec.setting, choiceOr(name, settings[spec.setting])]))
   };
 }
 
@@ -245,7 +277,17 @@ function resolveGroupDefaults(settings) {
     syncNavigation: boolOr(s.defaultSyncNavigation, DEFAULT_SYNC_NAVIGATION),
     mirrorClicks: boolOr(s.defaultMirrorClicks, DEFAULT_MIRROR_CLICKS),
     mirrorHover: boolOr(s.defaultMirrorHover, DEFAULT_MIRROR_HOVER),
-    showCursor: boolOr(s.defaultShowCursor, DEFAULT_SHOW_CURSOR)
+    showCursor: boolOr(s.defaultShowCursor, DEFAULT_SHOW_CURSOR),
+    ...Object.fromEntries(EXTRA_BOOL_OPTIONS.map(([field, setting, fallback]) => [field, boolOr(s[setting], fallback)])),
+    ...Object.fromEntries(Object.entries(CHOICE_OPTIONS).map(([name, spec]) => [name, choiceOr(name, s[spec.setting])]))
+  };
+}
+
+// Values of the extra options for UI states and the popup.
+function extraOptionValues(group) {
+  return {
+    ...Object.fromEntries(EXTRA_BOOL_OPTIONS.map(([field]) => [field, Boolean(group?.[field])])),
+    ...Object.fromEntries(Object.keys(CHOICE_OPTIONS).map((name) => [name, choiceOr(name, group?.[name])]))
   };
 }
 
@@ -555,7 +597,8 @@ function buildHiddenState(reason = 'Current tab is not in a split screen.') {
     syncNavigation: false,
     mirrorClicks: false,
     mirrorHover: false,
-    showCursor: false
+    showCursor: false,
+    ...Object.fromEntries(EXTRA_BOOL_OPTIONS.map(([field]) => [field, false]))
   };
 }
 
@@ -597,6 +640,7 @@ function buildUiStateForTab(group, tabId, show = true) {
     mirrorClicks: Boolean(group.mirrorClicks),
     mirrorHover: Boolean(group.mirrorHover),
     showCursor: Boolean(group.showCursor),
+    ...extraOptionValues(group),
     wpAdminBarHidden: enabled && Boolean(group.hideWpAdminBar),
     rulers: Array.isArray(group.rulers) ? group.rulers : [],
     color,
@@ -650,6 +694,8 @@ function getDefaultsFromExistingGroup(existing, defaults) {
     mirrorClicks: d.mirrorClicks,
     mirrorHover: d.mirrorHover,
     showCursor: d.showCursor,
+    ...Object.fromEntries(EXTRA_BOOL_OPTIONS.map(([field]) => [field, d[field]])),
+    ...Object.fromEntries(Object.keys(CHOICE_OPTIONS).map((name) => [name, d[name]])),
     lastKnownScrollX: 0,
     lastKnownScrollY: 0,
     lastSourceTabId: null,
@@ -732,6 +778,8 @@ async function scanWindow(windowId = null) {
       mirrorClicks: typeof existing.mirrorClicks === 'boolean' ? existing.mirrorClicks : groupDefaults.mirrorClicks,
       mirrorHover: typeof existing.mirrorHover === 'boolean' ? existing.mirrorHover : groupDefaults.mirrorHover,
       showCursor: typeof existing.showCursor === 'boolean' ? existing.showCursor : groupDefaults.showCursor,
+      ...Object.fromEntries(EXTRA_BOOL_OPTIONS.map(([field]) => [field, typeof existing[field] === 'boolean' ? existing[field] : groupDefaults[field]])),
+      ...Object.fromEntries(Object.keys(CHOICE_OPTIONS).map((name) => [name, choiceOr(name, existing[name] ?? groupDefaults[name])])),
       lastKnownScrollX: Number(existing.lastKnownScrollX || 0),
       lastKnownScrollY: Number(existing.lastKnownScrollY || 0),
       lastSourceTabId: existing.lastSourceTabId ?? null,
@@ -797,18 +845,63 @@ async function getGroupForTab(tabId, forceScanWindowId = null) {
   return group || null;
 }
 
-async function getCurrentScroll(tabId) {
+async function getCurrentScroll(tabId, withAnchor = false) {
   const ok = await ensureContentScript(tabId);
   if (!ok) return null;
 
-  const response = await safeSendMessage(tabId, { type: MSG.GET_SCROLL });
+  const response = await safeSendMessage(tabId, { type: MSG.GET_SCROLL, withAnchor: Boolean(withAnchor) });
   if (!response || typeof response.scrollX !== 'number' || typeof response.scrollY !== 'number') return null;
 
-  return { scrollX: response.scrollX, scrollY: response.scrollY };
+  return { scrollX: response.scrollX, scrollY: response.scrollY, anchor: response.anchor || null };
 }
 
-async function sendRemoteScroll(group, sourceTabId, targetTabId, scrollX, scrollY) {
+// "On element/content" alignment: the source pane describes the top-most
+// visible element (same descriptor format as hover/click: tag, id, data-*
+// attributes, short text, structural path) plus where the viewport starts
+// relative to it and the scroll percentage. Only passed while the pair uses
+// that mode.
+const MAX_DESCRIPTOR_CANDIDATES = 10;
+const MAX_DESCRIPTOR_VALUE = 500;
+
+function sanitizeDescriptor(raw) {
+  const d = plainObjectOr(raw);
+  const candidates = Array.isArray(d.candidates) ? d.candidates.slice(0, MAX_DESCRIPTOR_CANDIDATES) : [];
+  return {
+    tag: typeof d.tag === 'string' ? d.tag.slice(0, 40) : null,
+    candidates: candidates
+      .filter((c) => c && typeof c === 'object' && ['css', 'hrefPath', 'text'].includes(c.type) && typeof c.value === 'string')
+      .map((c) => ({
+        type: c.type,
+        value: c.value.slice(0, MAX_DESCRIPTOR_VALUE),
+        strong: Boolean(c.strong),
+        ...(typeof c.tag === 'string' ? { tag: c.tag.slice(0, 40) } : {})
+      })),
+    text: typeof d.text === 'string' ? d.text.slice(0, 200) : '',
+    textFingerprint: typeof d.textFingerprint === 'string' ? d.textFingerprint.slice(0, 80) : ''
+  };
+}
+
+function sanitizeAnchor(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const ratio = Number(raw.ratio);
+  return {
+    ...sanitizeDescriptor(raw),
+    delta: clampNumber(raw.delta, -1000000, 1000000),
+    ratio: Number.isFinite(ratio) ? Math.max(0, Math.min(1, ratio)) : null
+  };
+}
+
+// The signed offset the target pane adds on top of the source position.
+function sideOffsetFor(group, sourceTabId) {
+  const offsetY = Number(group.offsetY || 0);
+  if (sourceTabId === group.leftTabId) return offsetY;
+  if (sourceTabId === group.rightTabId) return -offsetY;
+  return 0;
+}
+
+async function sendRemoteScroll(group, sourceTabId, targetTabId, scrollX, scrollY, anchor = null) {
   const adjusted = adjustScrollForTarget(group, sourceTabId, targetTabId, scrollX, scrollY);
+  const useAnchor = choiceOr('alignMode', group.alignMode) === 'element';
   const ok = await ensureContentScript(targetTabId);
 
   if (!ok) {
@@ -822,6 +915,9 @@ async function sendRemoteScroll(group, sourceTabId, targetTabId, scrollX, scroll
     type: MSG.REMOTE_SCROLL,
     targetScrollX: adjusted.x,
     targetScrollY: adjusted.y,
+    alignMode: useAnchor ? 'element' : 'pixel',
+    anchor: useAnchor ? sanitizeAnchor(anchor) : null,
+    sideOffsetY: sideOffsetFor(group, sourceTabId),
     sourceTabId,
     splitViewId: group.splitViewId,
     groupKey: group.groupKey,
@@ -848,7 +944,7 @@ async function alignPeerToSource(group, sourceTabId) {
   const targetTabId = getPeerTabId(group, sourceTabId);
   if (!targetTabId) return false;
 
-  const current = await getCurrentScroll(sourceTabId);
+  const current = await getCurrentScroll(sourceTabId, group.alignMode === 'element');
   if (!current) return false;
 
   group.lastKnownScrollX = current.scrollX;
@@ -856,15 +952,15 @@ async function alignPeerToSource(group, sourceTabId) {
   group.lastSourceTabId = sourceTabId;
   scheduleSaveState();
 
-  return sendRemoteScroll(group, sourceTabId, targetTabId, current.scrollX, current.scrollY);
+  return sendRemoteScroll(group, sourceTabId, targetTabId, current.scrollX, current.scrollY, current.anchor);
 }
 
 async function alignTabToPeer(group, targetTabId) {
   const sourceTabId = getPeerTabId(group, targetTabId);
   if (!sourceTabId) return false;
 
-  const current = await getCurrentScroll(sourceTabId);
-  if (current) return sendRemoteScroll(group, sourceTabId, targetTabId, current.scrollX, current.scrollY);
+  const current = await getCurrentScroll(sourceTabId, group.alignMode === 'element');
+  if (current) return sendRemoteScroll(group, sourceTabId, targetTabId, current.scrollX, current.scrollY, current.anchor);
 
   if (typeof group.lastKnownScrollX === 'number' && typeof group.lastKnownScrollY === 'number') {
     return sendRemoteScroll(
@@ -943,8 +1039,8 @@ async function enableAllSplitViewsInCurrentWindow() {
   for (const group of Object.values(state.groups)) {
     if (activeWindowId != null && group.windowId !== activeWindowId) continue;
     await sendGroupState(group);
-    const leftScroll = await getCurrentScroll(group.leftTabId);
-    if (leftScroll) await sendRemoteScroll(group, group.leftTabId, group.rightTabId, leftScroll.scrollX, leftScroll.scrollY);
+    const leftScroll = await getCurrentScroll(group.leftTabId, group.alignMode === 'element');
+    if (leftScroll) await sendRemoteScroll(group, group.leftTabId, group.rightTabId, leftScroll.scrollX, leftScroll.scrollY, leftScroll.anchor);
     else await alignTabToPeer(group, group.leftTabId);
     await sendGroupState(group);
   }
@@ -1057,6 +1153,20 @@ async function setGroupBooleanOption(tabId, windowId, optionName, value) {
   group.error = null;
   await saveStateNow();
   await sendGroupState(group);
+}
+
+async function setGroupChoiceOption(tabId, windowId, optionName, value) {
+  if (!Object.prototype.hasOwnProperty.call(CHOICE_OPTIONS, optionName)) return;
+  if (!CHOICE_OPTIONS[optionName].values.includes(value)) return;
+  await scanWindow(windowId);
+  const group = await getGroupForTab(tabId, windowId);
+  if (!group) return;
+
+  group[optionName] = value;
+  group.error = null;
+  await saveStateNow();
+  await sendGroupState(group);
+  if (group.enabled) await alignPeerToSource(group, tabId);
 }
 
 // ---- "Reloading" status ------------------------------------------------------
@@ -1200,7 +1310,7 @@ async function handleScrollMessage(sender, message) {
   const targetTabId = getPeerTabId(group, tabId);
   if (!targetTabId) return;
 
-  await sendRemoteScroll(group, tabId, targetTabId, group.lastKnownScrollX, group.lastKnownScrollY);
+  await sendRemoteScroll(group, tabId, targetTabId, group.lastKnownScrollX, group.lastKnownScrollY, message.anchor);
 }
 
 async function handleNavigationFromTab(tabId, windowId, sourceUrl) {
@@ -1594,8 +1704,12 @@ async function handleUiCommand(sender, command, message = {}) {
     case CMD.SET_SHOW_CURSOR:
       await setGroupBooleanOption(tabId, windowId, 'showCursor', Boolean(message.value));
       break;
-    default:
-      debug('Unknown UI command', command);
+    default: {
+      const option = Object.prototype.hasOwnProperty.call(OPTION_COMMANDS, command) ? OPTION_COMMANDS[command] : null;
+      if (option?.kind === 'bool') await setGroupBooleanOption(tabId, windowId, option.field, Boolean(message.value));
+      else if (option?.kind === 'choice') await setGroupChoiceOption(tabId, windowId, option.field, message.value);
+      else debug('Unknown UI command', command);
+    }
   }
 }
 
@@ -1617,6 +1731,7 @@ function summarizeGroupForPopup(group) {
     mirrorClicks: Boolean(group.mirrorClicks),
     mirrorHover: Boolean(group.mirrorHover),
     showCursor: Boolean(group.showCursor),
+    ...extraOptionValues(group),
     hideWpAdminBar: Boolean(group.hideWpAdminBar),
     rulerCount: Array.isArray(group.rulers) ? group.rulers.length : 0
   };
@@ -1678,6 +1793,13 @@ async function setOptionForActiveSplit(option, value) {
   const activeTab = await getActiveTab();
   if (!field || !activeTab?.id || typeof activeTab.windowId !== 'number') return getPopupStatus();
   await setGroupBooleanOption(activeTab.id, activeTab.windowId, field, Boolean(value));
+  return getPopupStatus();
+}
+
+async function setChoiceForActiveSplit(option, value) {
+  const activeTab = await getActiveTab();
+  if (!activeTab?.id || typeof activeTab.windowId !== 'number') return getPopupStatus();
+  await setGroupChoiceOption(activeTab.id, activeTab.windowId, option, value);
   return getPopupStatus();
 }
 
@@ -1899,8 +2021,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       for (const field of SETTINGS_DEFAULT_FIELDS) {
         if (typeof incoming[field] === 'boolean') next[field] = incoming[field];
       }
+      for (const spec of Object.values(CHOICE_OPTIONS)) {
+        if (spec.values.includes(incoming[spec.setting])) next[spec.setting] = incoming[spec.setting];
+      }
       await saveSettings(next);
       sendResponse(await getPopupStatus());
+      return;
+    }
+
+    if (message.type === MSG.POPUP_SET_GROUP_CHOICE) {
+      const option = String(message.option || '');
+      if (!Object.prototype.hasOwnProperty.call(CHOICE_OPTIONS, option)) {
+        sendResponse(await getPopupStatus());
+        return;
+      }
+      sendResponse(await setChoiceForActiveSplit(option, String(message.value || '')));
       return;
     }
 
