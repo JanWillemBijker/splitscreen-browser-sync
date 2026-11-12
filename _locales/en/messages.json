@@ -104,6 +104,12 @@
   "optHoverHelp": {
     "message": "Shows hover styles and hover menus on both sides."
   },
+  "optCursor": {
+    "message": "Show mouse cursor"
+  },
+  "optCursorHelp": {
+    "message": "Shows a pointer in the other pane where your mouse is. Only shows, never clicks."
+  },
   "optWpAdminBar": {
     "message": "Hide WordPress admin bar"
   },

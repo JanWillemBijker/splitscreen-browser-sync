@@ -1,8 +1,12 @@
 'use strict';
 
 (() => {
-  if (window.__SVSS_CONTENT_LOADED__) return;
-  window.__SVSS_CONTENT_LOADED__ = true;
+  // Runs once per page. A previous instance only counts while its extension
+  // context is still alive: after an extension update or reload the old
+  // script is orphaned and must not block the freshly injected one.
+  const previousInstance = window.__SVSS_CONTENT_LOADED__;
+  if (previousInstance && typeof previousInstance.isAlive === 'function' && previousInstance.isAlive()) return;
+  window.__SVSS_CONTENT_LOADED__ = Object.freeze({ isAlive: () => Boolean(chrome?.runtime?.id) });
 
   const DEBUG = false;
 
@@ -33,7 +37,9 @@
     POPUP_RULER_ADD: 'SVSS_POPUP_RULER_ADD',
     TOAST: 'SVSS_TOAST',
     FOCUS: 'SVSS_FOCUS',
-    REMOTE_FOCUS: 'SVSS_REMOTE_FOCUS'
+    REMOTE_FOCUS: 'SVSS_REMOTE_FOCUS',
+    POINTER: 'SVSS_POINTER',
+    REMOTE_POINTER: 'SVSS_REMOTE_POINTER'
   });
 
   const CMD = Object.freeze({
@@ -53,11 +59,15 @@
     SET_WP_ADMIN_BAR: 'SET_WP_ADMIN_BAR',
     SET_NAVIGATION_SYNC: 'SET_NAVIGATION_SYNC',
     SET_CLICK_MIRRORING: 'SET_CLICK_MIRRORING',
-    SET_HOVER_MIRRORING: 'SET_HOVER_MIRRORING'
+    SET_HOVER_MIRRORING: 'SET_HOVER_MIRRORING',
+    SET_SHOW_CURSOR: 'SET_SHOW_CURSOR'
   });
 
   const HOST_ID = 'svss-root';
   const RULER_HOST_ID = 'svss-ruler-root';
+  const CURSOR_HOST_ID = 'svss-cursor-root';
+  const CURSOR_IDLE_HIDE_MS = 1500;
+  const POINTER_MIN_INTERVAL_MS = 33; // at most ~30 pointer messages per second
   // Legacy light-DOM ruler nodes (before 1.1.0 hardening); removed if present.
   const LEGACY_RULER_IDS = ['svss-ruler-layer', 'svss-ruler-popup'];
   const WP_STYLE_ID = 'splitview-scroll-sync-wp-adminbar-hide';
@@ -466,10 +476,14 @@
     syncNavigation: false,
     mirrorClicks: false,
     mirrorHover: false,
+    showCursor: false,
     wpAdminBarHidden: false,
     side: 'unknown',
     reloading: false
   };
+  // Revision of the last applied state; older states that arrive late are
+  // ignored so they cannot switch sync off again in this page.
+  let lastStateRev = 0;
 
   let host = null;
   let shadow = null;
@@ -816,6 +830,7 @@
     optionsSection.appendChild(createToggle(t('optNavigation', 'Sync navigation'), uiState.syncNavigation, CMD.SET_NAVIGATION_SYNC));
     optionsSection.appendChild(createToggle(t('optClicks', 'Mirror clicks'), uiState.mirrorClicks, CMD.SET_CLICK_MIRRORING));
     optionsSection.appendChild(createToggle(t('optHover', 'Mirror hover effects'), uiState.mirrorHover, CMD.SET_HOVER_MIRRORING));
+    optionsSection.appendChild(createToggle(t('optCursor', 'Show mouse cursor'), uiState.showCursor, CMD.SET_SHOW_CURSOR));
     optionsSection.appendChild(createToggle(t('optWpAdminBar', 'Hide WordPress admin bar'), uiState.hideWpAdminBar, CMD.SET_WP_ADMIN_BAR));
     panel.appendChild(optionsSection);
 
@@ -1073,6 +1088,7 @@
 
   function updateUi() {
     reconcileHoverFeatureState();
+    reconcileCursorFeatureState();
 
     if (!uiState.show) {
       hideFloatingUi();
@@ -2436,18 +2452,324 @@
     sendRuntimeMessage({ type: MSG.HOVER_CLEAR, timestamp: Date.now() });
   }
 
+  // ---- Virtual mouse cursor ---------------------------------------------------
+  // The pane with the real mouse sends its pointer position (numbers only,
+  // from trusted events, rAF-throttled to ~30/s) while the pair is syncing on
+  // its pinned origins. The other pane draws a pointer arrow at the mirrored
+  // point, mapped like hover mirroring (mirroredPointToLocal). The arrow lives
+  // in its own fresh host with a closed shadow root and pointer-events:none:
+  // the page can see that the host exists, but cannot read or move what is
+  // inside, and the host holds no page data.
+
+  const CURSOR_CSS = `
+    :host { all: initial; }
+    .cursor {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 0;
+      height: 0;
+      pointer-events: none;
+      opacity: 0;
+      transform: translate3d(-100px, -100px, 0);
+      transition: transform 70ms linear, opacity 180ms ease;
+      will-change: transform, opacity;
+    }
+    .cursor.visible { opacity: 1; }
+    .cursor.jump { transition: opacity 180ms ease; }
+    .arrow {
+      position: absolute;
+      left: -1px;
+      top: -1px;
+      width: 22px;
+      height: 28px;
+      overflow: visible;
+      filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.35)) drop-shadow(0 3px 6px rgba(0, 0, 0, 0.18));
+    }
+    .arrow path {
+      fill: #ffffff;
+      stroke: #15201b;
+      stroke-width: 1.5;
+      stroke-linejoin: round;
+    }
+    .label {
+      position: absolute;
+      left: 16px;
+      top: 22px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 7px 2px 5px;
+      border-radius: 999px;
+      background: #3cde95;
+      color: #072619;
+      font: 600 11px/1.3 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+      white-space: nowrap;
+      box-shadow: 0 1px 2px rgba(7, 38, 25, 0.3);
+    }
+    .label::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #0b5a3f;
+    }
+    .ripple {
+      position: absolute;
+      left: -18px;
+      top: -18px;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: 2px solid #12a26b;
+      background: rgba(60, 222, 149, 0.25);
+      opacity: 0;
+      transform: scale(0.2);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .cursor { transition: opacity 180ms ease; }
+    }
+  `;
+
+  let cursorHost = null;
+  let cursorShadow = null;
+  let cursorEl = null;
+  let cursorLabel = null;
+  let cursorRipple = null;
+  let cursorVisible = false;
+  let cursorIdleTimer = null;
+
+  let pointerPending = null;
+  let pointerRafPending = false;
+  let lastPointerSentAt = 0;
+  let pointerActiveSent = false;
+
+  function cursorFeatureOn() {
+    return Boolean(uiState.enabled && uiState.showCursor);
+  }
+
+  function teardownCursorHost() {
+    if (cursorIdleTimer) clearTimeout(cursorIdleTimer);
+    cursorIdleTimer = null;
+    if (cursorHost) cursorHost.remove();
+    cursorHost = null;
+    cursorShadow = null;
+    cursorEl = null;
+    cursorLabel = null;
+    cursorRipple = null;
+    cursorVisible = false;
+  }
+
+  function ensureCursorLayer() {
+    if (cursorHost && cursorShadow && cursorEl && cursorHost.isConnected && cursorHost.parentNode === document.documentElement) {
+      removeForeignNodes([CURSOR_HOST_ID], cursorHost);
+      return cursorEl;
+    }
+
+    teardownCursorHost();
+    removeForeignNodes([CURSOR_HOST_ID], null);
+    if (!document.documentElement) return null;
+
+    cursorHost = document.createElement('div');
+    cursorHost.id = CURSOR_HOST_ID;
+    const declarations = {
+      display: 'block', visibility: 'visible', opacity: '1', filter: 'none', transform: 'none',
+      'clip-path': 'none', mask: 'none', position: 'fixed', top: '0', left: '0', width: '0', height: '0',
+      margin: '0', padding: '0', border: '0', overflow: 'visible', 'pointer-events': 'none',
+      'z-index': '2147483647'
+    };
+    for (const [property, value] of Object.entries(declarations)) cursorHost.style.setProperty(property, value, 'important');
+    cursorHost.setAttribute('aria-hidden', 'true');
+    document.documentElement.appendChild(cursorHost);
+    cursorShadow = cursorHost.attachShadow({ mode: 'closed' });
+
+    const style = document.createElement('style');
+    style.textContent = CURSOR_CSS;
+
+    cursorEl = document.createElement('div');
+    cursorEl.className = 'cursor jump';
+
+    cursorRipple = document.createElement('div');
+    cursorRipple.className = 'ripple';
+
+    // Classic arrow pointer, tip at (1, 1).
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('class', 'arrow');
+    svg.setAttribute('viewBox', '0 0 22 28');
+    svg.setAttribute('focusable', 'false');
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', 'M1.5 1.5v20.2l5.1-4.9 3.4 7.9 3.6-1.5-3.4-7.8h7.1z');
+    svg.appendChild(path);
+
+    cursorLabel = document.createElement('span');
+    cursorLabel.className = 'label';
+
+    cursorEl.appendChild(cursorRipple);
+    cursorEl.appendChild(svg);
+    cursorEl.appendChild(cursorLabel);
+    cursorShadow.appendChild(style);
+    cursorShadow.appendChild(cursorEl);
+    return cursorEl;
+  }
+
+  function hideCursor() {
+    if (cursorIdleTimer) clearTimeout(cursorIdleTimer);
+    cursorIdleTimer = null;
+    cursorVisible = false;
+    if (cursorEl) cursorEl.classList.remove('visible');
+  }
+
+  function playCursorRipple() {
+    if (!cursorRipple || typeof cursorRipple.animate !== 'function') return;
+    try {
+      cursorRipple.animate([
+        { opacity: 0.9, transform: 'scale(0.2)' },
+        { opacity: 0, transform: 'scale(1.4)' }
+      ], { duration: 450, easing: 'ease-out' });
+    } catch (_error) {
+      // purely visual
+    }
+  }
+
+  function applyRemotePointer(pointer) {
+    if (!cursorFeatureOn() || !pointer || typeof pointer !== 'object') {
+      hideCursor();
+      return;
+    }
+    if (pointer.kind === 'leave') {
+      hideCursor();
+      return;
+    }
+
+    const el = ensureCursorLayer();
+    if (!el) return;
+
+    // The label names the side where the real mouse is (the other pane).
+    const sourceSide = uiState.side === 'left' ? 'right' : (uiState.side === 'right' ? 'left' : null);
+    const labelText = sourceSide ? t(sourceSide === 'left' ? 'colLeft' : 'colRight', '') : '';
+    if (cursorLabel.textContent !== labelText) cursorLabel.textContent = labelText;
+    cursorLabel.style.display = labelText ? '' : 'none';
+
+    const { x, y } = mirroredPointToLocal(pointer);
+    // Coming back from hidden: jump to the new spot instead of gliding there.
+    const jump = !cursorVisible;
+    el.classList.toggle('jump', jump);
+    el.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0)`;
+    if (jump) {
+      // Force the jump to apply before re-enabling the transition.
+      void el.offsetWidth;
+      requestAnimationFrame(() => { if (cursorEl === el) el.classList.remove('jump'); });
+    }
+    el.classList.add('visible');
+    cursorVisible = true;
+
+    if (pointer.kind === 'down') playCursorRipple();
+
+    if (cursorIdleTimer) clearTimeout(cursorIdleTimer);
+    cursorIdleTimer = setTimeout(hideCursor, CURSOR_IDLE_HIDE_MS);
+  }
+
+  function reconcileCursorFeatureState() {
+    if (!cursorFeatureOn()) {
+      teardownCursorHost();
+      pointerPending = null;
+      pointerActiveSent = false;
+    }
+  }
+
+  function sendPointer(kind, clientX, clientY) {
+    pointerActiveSent = kind !== 'leave';
+    lastPointerSentAt = performance.now();
+    sendRuntimeMessage({
+      type: MSG.POINTER,
+      pointer: {
+        kind,
+        clientX,
+        clientY,
+        vw: window.innerWidth || 0,
+        vh: window.innerHeight || 0
+      }
+    });
+  }
+
+  function flushPointerSend() {
+    pointerRafPending = false;
+    if (!cursorFeatureOn() || !pointerPending) return;
+    if (performance.now() - lastPointerSentAt < POINTER_MIN_INTERVAL_MS) {
+      pointerRafPending = true;
+      requestAnimationFrame(flushPointerSend);
+      return;
+    }
+    const { x, y } = pointerPending;
+    pointerPending = null;
+    sendPointer('move', x, y);
+  }
+
+  function handleCursorPointerMove(event) {
+    if (!cursorFeatureOn() || !event.isTrusted) return;
+    if (event.pointerType === 'touch') return;
+    // The real mouse is here now; a virtual one in this pane would only confuse.
+    if (cursorVisible) hideCursor();
+    if (isInsideExtensionUi(event) || isInsideRulerUi(event)) {
+      sendPointerLeave();
+      return;
+    }
+    pointerPending = { x: Number(event.clientX) || 0, y: Number(event.clientY) || 0 };
+    if (pointerRafPending) return;
+    pointerRafPending = true;
+    requestAnimationFrame(flushPointerSend);
+  }
+
+  // A real click shows a short ripple on the other side; purely visual, so
+  // it is sent even when click mirroring is off.
+  function handleCursorPointerDown(event) {
+    if (!cursorFeatureOn() || !event.isTrusted) return;
+    if (event.pointerType === 'touch') return;
+    if (event.button !== undefined && event.button !== 0) return;
+    if (isInsideExtensionUi(event) || isInsideRulerUi(event)) return;
+    pointerPending = null;
+    sendPointer('down', Number(event.clientX) || 0, Number(event.clientY) || 0);
+  }
+
+  function sendPointerLeave() {
+    pointerPending = null;
+    if (!pointerActiveSent || !cursorFeatureOn()) {
+      pointerActiveSent = false;
+      return;
+    }
+    sendPointer('leave', 0, 0);
+  }
+
+  function handlePointerExit() {
+    sendHoverClear();
+    sendPointerLeave();
+  }
+
   async function requestSplitStatus() {
     const response = await sendRuntimeMessage({ type: MSG.GET_SPLIT_STATUS, timestamp: Date.now() });
 
     if (response?.state) {
-      uiState = { ...uiState, ...response.state };
-      updateUi();
-      return Boolean(response.state.show);
+      if (acceptStateRev(response.state)) {
+        uiState = { ...uiState, ...response.state };
+        updateUi();
+      }
+      return Boolean(uiState.show);
     }
 
-    uiState = { ...uiState, show: false, enabled: false, wpAdminBarHidden: false };
-    updateUi();
+    // No answer. Only fall back to "hidden" when no state was received yet;
+    // a state that did arrive is newer than this failed request.
+    if (lastStateRev === 0) {
+      uiState = { ...uiState, show: false, enabled: false, wpAdminBarHidden: false };
+      updateUi();
+    }
     return false;
+  }
+
+  function acceptStateRev(state) {
+    const rev = Number(state?.rev) || 0;
+    if (rev && rev < lastStateRev) return false;
+    if (rev) lastStateRev = rev;
+    return true;
   }
 
   async function sendReady() {
@@ -2473,6 +2795,10 @@
     }
 
     if (message.type === MSG.STATE) {
+      if (!acceptStateRev(message.state)) {
+        sendResponse({ ok: true, stale: true });
+        return false;
+      }
       uiState = { ...uiState, ...(message.state || {}) };
       if (Array.isArray(message.state?.rulers)) {
         rulers = sanitizeRulers(message.state.rulers);
@@ -2484,7 +2810,11 @@
     }
 
     if (message.type === MSG.HIDE_FLOATING_UI) {
-      uiState = { ...uiState, show: false, enabled: false, wpAdminBarHidden: false, mirrorClicks: false, mirrorHover: false };
+      if (!acceptStateRev(message.state)) {
+        sendResponse({ ok: true, stale: true });
+        return false;
+      }
+      uiState = { ...uiState, show: false, enabled: false, wpAdminBarHidden: false, mirrorClicks: false, mirrorHover: false, showCursor: false };
       rulers = [];
       renderRulers();
       updateUi();
@@ -2511,6 +2841,12 @@
 
     if (message.type === MSG.REMOTE_HOVER) {
       if (isForThisOrigin(message)) applyRemoteHover(message.hover);
+      sendResponse({ ok: true });
+      return false;
+    }
+
+    if (message.type === MSG.REMOTE_POINTER) {
+      if (isForThisOrigin(message)) applyRemotePointer(message.pointer);
       sendResponse({ ok: true });
       return false;
     }
@@ -2575,14 +2911,17 @@
   document.addEventListener('click', handleLocalClick, true);
   document.addEventListener('focusin', handleLocalFocusIn, true);
   document.addEventListener('pointermove', handleLocalPointerMove, true);
-  document.addEventListener('pointerleave', sendHoverClear, true);
-  window.addEventListener('blur', sendHoverClear, true);
+  document.addEventListener('pointermove', handleCursorPointerMove, true);
+  document.addEventListener('pointerdown', handleCursorPointerDown, true);
+  document.addEventListener('pointerleave', handlePointerExit, true);
+  window.addEventListener('blur', handlePointerExit, true);
   window.addEventListener('mouseout', (event) => {
-    if (!event.relatedTarget && !event.toElement) sendHoverClear();
+    if (!event.relatedTarget && !event.toElement) handlePointerExit();
   }, true);
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) sendHoverClear();
+    if (document.hidden) handlePointerExit();
   });
+  window.addEventListener('pagehide', handlePointerExit, true);
 
   window.addEventListener('pageshow', () => {
     requestSplitStatus();

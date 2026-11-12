@@ -46,8 +46,26 @@ Made by BijBijker – https://bijbijker.nl
 - Mirrors navigation between the two pinned origins (live/staging) while preserving each side's origin (default on).
 - Optionally mirrors interactive clicks between panes, including closing overlays by clicking outside them (default off; never submits forms or triggers delete/pay/log-out style actions).
 - Mirrors hover effects (CSS `:hover` styling and JS-driven hover menus) between panes (default on).
+- Shows a virtual mouse cursor in the other pane where your mouse is, with a short ripple when you click (default on; display only, never clicks anything).
 
 ## Changes in 1.1.0
+
+### Virtual mouse cursor
+
+- New option **Show mouse cursor** (*Muiscursor tonen*), per pair and as a default for new pairs, **on by default**, in the popup and the on-page panel.
+- While the pair is syncing on its pinned origins, the pane with the real mouse sends its pointer position (numbers only: viewport point and size; trusted events only; rAF-throttled to at most ~30 messages per second). The other pane draws a classic arrow pointer with a small label naming the side the mouse is on, mapped exactly like hover mirroring (same viewport point, X scaled to the pane width; scroll is synced so it points at the same content).
+- Smooth movement (CSS transform with a short transition), hides after 1.5 s without movement, when the mouse leaves the source pane/window, when the real mouse enters the receiving pane, and when sync pauses or stops. A real click in the source pane shows a short ripple on the other side (visual only, also when click mirroring is off).
+- The cursor lives in its own fresh host with a closed shadow root, `pointer-events: none` and maximum z-index; the page can see that the host exists but cannot read or move what is inside, and it holds no page data. The service worker only relays positions from a pane on its pinned origin and the receiving pane checks its own origin.
+
+### Fixed: Start sync sometimes needed a second press
+
+- Root cause: every window scan replaced each pair's state object. Start sync looked the pair up, awaited a few tab calls and then set `enabled = true`; when another event re-scanned the window in between (the other pane becoming active because you clicked into it, a content script reporting READY, the popup asking for status), the change landed on a detached copy and was lost, while the panes still received a "synced" state. Also, concurrent first loads of the session state after the service worker woke up could hand out two different state objects.
+- Fix: pairs are updated in place, the session state and settings are loaded once and shared, Start first makes sure both panes have a live content script (injecting into tabs opened before install/update), then pins the origins, enables, saves and broadcasts. Every UI state carries a revision so a page ignores a state that arrives after a newer one. A content script that was orphaned by an extension update no longer blocks the freshly injected one.
+
+### Fixed: status stuck on "Reloading" (orange) after opening another page
+
+- Root cause: Chrome reports a navigation as `status: loading` together with the new URL. The handler first did the slow navigation work (window refresh, mirroring, content-script checks) and only then marked the pane as reloading, while the `complete` event of the same tab, handled in parallel, had usually already cleared it. The mark then stayed forever.
+- Fix: tab events (and READY messages) are processed in order per tab and the pane is marked reloading before any slow work. READY from the page's content script also clears the mark (covers bfcache restores), every mark is re-checked against the real tab status after 1.2/3.5/8 s and dropped after 20 s at the latest, and popup/page status requests re-check marks too (survives a service-worker restart). Popup and on-page panel both return to *Synced* with a green dot.
 
 ### Redesigned interface
 
@@ -181,6 +199,7 @@ split screen pairing begins with your preferred configuration:
 - Sync navigation (default on)
 - Mirror clicks (default off)
 - Mirror hover effects (default on)
+- Show mouse cursor (default on)
 
 These defaults are applied when a split screen pairing is first detected. They
 do not retroactively change a pairing that already exists in the current
@@ -363,6 +382,10 @@ Hover updates are sent only when the hovered element changes (throttled to the
 animation frame), and the same `isTrusted` rule used for clicks prevents hover
 loops.
 
+## Show mouse cursor
+
+Default: on for new pairs. Toggle: **Show mouse cursor** (per Split View group, popup and on-page panel). While the pair is syncing on its pinned origins, a pointer arrow in the other pane follows your mouse and shows a ripple when you click. It is drawn in a closed shadow root with `pointer-events: none`, so it never interacts with the page. Only the viewport position is passed between the panes; it is not stored.
+
 ## Keyboard shortcuts
 
 | Command | Default shortcut | Action |
@@ -449,6 +472,14 @@ chrome://extensions/shortcuts
 - [ ] Hover a menu that opens a submenu on hover; the submenu opens on the other side.
 - [ ] Move the mouse away; the hover style and submenu clear on the other side.
 - [ ] No infinite hover loop occurs.
+
+### Show mouse cursor
+
+- [ ] **Show mouse cursor** is on by default for a new pair (popup and panel).
+- [ ] Moving the mouse in one pane shows a smooth arrow cursor at the same content in the other pane, labelled with the side the mouse is on.
+- [ ] The cursor hides after about 1.5 s without movement, when the mouse leaves the pane or window, and when sync stops or pauses.
+- [ ] A click shows a short ripple on the other side, also with Mirror clicks off.
+- [ ] Turning the option off removes the cursor immediately.
 
 ### Multiple Split View pairs
 

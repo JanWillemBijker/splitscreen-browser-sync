@@ -11,10 +11,17 @@ const DEFAULT_HIDE_WP_ADMIN_BAR = true;
 const DEFAULT_SYNC_NAVIGATION = true;
 const DEFAULT_MIRROR_CLICKS = false;
 const DEFAULT_MIRROR_HOVER = true;
+// Showing a virtual mouse cursor in the other pane only draws a pointer there;
+// it never triggers anything on the page, so it is on by default.
+const DEFAULT_SHOW_CURSOR = true;
 const PAUSE_ORIGIN_CHANGED = 'origin-changed';
 const DEFAULT_ALWAYS_SHOW_BUTTON = true;
 const SAVE_DEBOUNCE_MS = 150;
 const NAVIGATION_LOCK_MS = 1500;
+// A pane marked "reloading" is re-checked after these delays (ms since the
+// mark). The last check clears the mark even if Chrome still reports
+// "loading" (a page that never finishes must not block the status forever).
+const RELOADING_RECHECK_DELAYS = [1200, 3500, 8000, 20000];
 
 const MSG = Object.freeze({
   READY: 'SVSS_READY',
@@ -49,7 +56,9 @@ const MSG = Object.freeze({
   POPUP_RULER_ADD: 'SVSS_POPUP_RULER_ADD',
   TOAST: 'SVSS_TOAST',
   FOCUS: 'SVSS_FOCUS',
-  REMOTE_FOCUS: 'SVSS_REMOTE_FOCUS'
+  REMOTE_FOCUS: 'SVSS_REMOTE_FOCUS',
+  POINTER: 'SVSS_POINTER',
+  REMOTE_POINTER: 'SVSS_REMOTE_POINTER'
 });
 
 const CMD = Object.freeze({
@@ -70,12 +79,19 @@ const CMD = Object.freeze({
   SET_WP_ADMIN_BAR: 'SET_WP_ADMIN_BAR',
   SET_NAVIGATION_SYNC: 'SET_NAVIGATION_SYNC',
   SET_CLICK_MIRRORING: 'SET_CLICK_MIRRORING',
-  SET_HOVER_MIRRORING: 'SET_HOVER_MIRRORING'
+  SET_HOVER_MIRRORING: 'SET_HOVER_MIRRORING',
+  SET_SHOW_CURSOR: 'SET_SHOW_CURSOR'
 });
 
 let stateCache = null;
+let statePromise = null;
 let settingsCache = null;
+let settingsPromise = null;
 let saveTimer = null;
+// Monotonic revision stamped on every UI state sent to a page, so a page can
+// drop a state that arrives after a newer one (messages to a tab can overtake
+// each other, e.g. a GET_SPLIT_STATUS reply computed before Start sync).
+let uiRevCounter = 0;
 
 function debug(...args) {
   if (DEBUG) console.log('[SplitScreen Browser Sync]', ...args);
@@ -108,15 +124,25 @@ const GESTURE_REQUIRED_COMMANDS = new Set([
   CMD.SET_WP_ADMIN_BAR,
   CMD.SET_NAVIGATION_SYNC,
   CMD.SET_CLICK_MIRRORING,
-  CMD.SET_HOVER_MIRRORING
+  CMD.SET_HOVER_MIRRORING,
+  CMD.SET_SHOW_CURSOR
 ]);
 
 const POPUP_GROUP_OPTIONS = Object.freeze({
   syncNavigation: 'syncNavigation',
   mirrorClicks: 'mirrorClicks',
   mirrorHover: 'mirrorHover',
-  hideWpAdminBar: 'hideWpAdminBar'
+  hideWpAdminBar: 'hideWpAdminBar',
+  showCursor: 'showCursor'
 });
+
+const SETTINGS_DEFAULT_FIELDS = Object.freeze([
+  'defaultHideWpAdminBar',
+  'defaultSyncNavigation',
+  'defaultMirrorClicks',
+  'defaultMirrorHover',
+  'defaultShowCursor'
+]);
 
 function t(key, substitutions) {
   try {
@@ -202,7 +228,8 @@ function normalizeSettings(raw) {
     defaultHideWpAdminBar: boolOr(settings.defaultHideWpAdminBar, DEFAULT_HIDE_WP_ADMIN_BAR),
     defaultSyncNavigation: boolOr(settings.defaultSyncNavigation, DEFAULT_SYNC_NAVIGATION),
     defaultMirrorClicks: boolOr(settings.defaultMirrorClicks, DEFAULT_MIRROR_CLICKS),
-    defaultMirrorHover: boolOr(settings.defaultMirrorHover, DEFAULT_MIRROR_HOVER)
+    defaultMirrorHover: boolOr(settings.defaultMirrorHover, DEFAULT_MIRROR_HOVER),
+    defaultShowCursor: boolOr(settings.defaultShowCursor, DEFAULT_SHOW_CURSOR)
   };
 }
 
@@ -216,36 +243,51 @@ function resolveGroupDefaults(settings) {
     hideWpAdminBar: boolOr(s.defaultHideWpAdminBar, DEFAULT_HIDE_WP_ADMIN_BAR),
     syncNavigation: boolOr(s.defaultSyncNavigation, DEFAULT_SYNC_NAVIGATION),
     mirrorClicks: boolOr(s.defaultMirrorClicks, DEFAULT_MIRROR_CLICKS),
-    mirrorHover: boolOr(s.defaultMirrorHover, DEFAULT_MIRROR_HOVER)
+    mirrorHover: boolOr(s.defaultMirrorHover, DEFAULT_MIRROR_HOVER),
+    showCursor: boolOr(s.defaultShowCursor, DEFAULT_SHOW_CURSOR)
   };
 }
 
-async function getState() {
-  if (stateCache) return stateCache;
-
-  try {
-    const stored = await chrome.storage.session.get(SESSION_KEY);
-    stateCache = normalizeState(stored[SESSION_KEY]);
-  } catch (error) {
-    debug('storage.session unavailable, using in-memory state only', error);
-    stateCache = normalizeState({});
+// The state is loaded once per service worker life. Concurrent first callers
+// (several events arrive together when the worker wakes up) share one load,
+// so they all get the same object; separate loads used to hand out different
+// objects and changes made on one of them (such as enabled = true) were lost.
+function getState() {
+  if (stateCache) return Promise.resolve(stateCache);
+  if (!statePromise) {
+    statePromise = (async () => {
+      let loaded;
+      try {
+        const stored = await chrome.storage.session.get(SESSION_KEY);
+        loaded = normalizeState(stored[SESSION_KEY]);
+      } catch (error) {
+        debug('storage.session unavailable, using in-memory state only', error);
+        loaded = normalizeState({});
+      }
+      if (!stateCache) stateCache = loaded;
+      return stateCache;
+    })();
   }
-
-  return stateCache;
+  return statePromise;
 }
 
-async function getSettings() {
-  if (settingsCache) return settingsCache;
-
-  try {
-    const stored = await chrome.storage.local.get(LOCAL_SETTINGS_KEY);
-    settingsCache = normalizeSettings(stored[LOCAL_SETTINGS_KEY]);
-  } catch (error) {
-    debug('storage.local unavailable, using default settings', error);
-    settingsCache = normalizeSettings({});
+function getSettings() {
+  if (settingsCache) return Promise.resolve(settingsCache);
+  if (!settingsPromise) {
+    settingsPromise = (async () => {
+      let loaded;
+      try {
+        const stored = await chrome.storage.local.get(LOCAL_SETTINGS_KEY);
+        loaded = normalizeSettings(stored[LOCAL_SETTINGS_KEY]);
+      } catch (error) {
+        debug('storage.local unavailable, using default settings', error);
+        loaded = normalizeSettings({});
+      }
+      if (!settingsCache) settingsCache = loaded;
+      return settingsCache;
+    })();
   }
-
-  return settingsCache;
+  return settingsPromise;
 }
 
 async function saveSettings(settings) {
@@ -445,7 +487,17 @@ async function safeSendMessage(tabId, message) {
   }
 }
 
-async function ensureContentScript(tabId) {
+// One check/injection per tab at a time; parallel callers share the result.
+const contentScriptChecks = new Map();
+
+function ensureContentScript(tabId) {
+  if (contentScriptChecks.has(tabId)) return contentScriptChecks.get(tabId);
+  const check = ensureContentScriptNow(tabId).finally(() => contentScriptChecks.delete(tabId));
+  contentScriptChecks.set(tabId, check);
+  return check;
+}
+
+async function ensureContentScriptNow(tabId) {
   const ping = await safeSendMessage(tabId, { type: MSG.PING });
   if (ping?.ok) return true;
 
@@ -486,8 +538,14 @@ async function getManualButtonOverride(groupKey) {
   return 'default';
 }
 
+function nextUiRev() {
+  uiRevCounter = (uiRevCounter + 1) % 1000;
+  return Date.now() * 1000 + uiRevCounter;
+}
+
 function buildHiddenState(reason = 'Current tab is not in a split screen.') {
   return {
+    rev: nextUiRev(),
     show: false,
     enabled: false,
     wpAdminBarHidden: false,
@@ -495,7 +553,8 @@ function buildHiddenState(reason = 'Current tab is not in a split screen.') {
     statusText: reason,
     syncNavigation: false,
     mirrorClicks: false,
-    mirrorHover: false
+    mirrorHover: false,
+    showCursor: false
   };
 }
 
@@ -522,6 +581,7 @@ function buildUiStateForTab(group, tabId, show = true) {
   }
 
   return {
+    rev: nextUiRev(),
     show,
     splitViewId: group.splitViewId,
     groupKey: group.groupKey,
@@ -535,6 +595,7 @@ function buildUiStateForTab(group, tabId, show = true) {
     syncNavigation: Boolean(group.syncNavigation),
     mirrorClicks: Boolean(group.mirrorClicks),
     mirrorHover: Boolean(group.mirrorHover),
+    showCursor: Boolean(group.showCursor),
     wpAdminBarHidden: enabled && Boolean(group.hideWpAdminBar),
     rulers: Array.isArray(group.rulers) ? group.rulers : [],
     color,
@@ -587,6 +648,7 @@ function getDefaultsFromExistingGroup(existing, defaults) {
     syncNavigation: d.syncNavigation,
     mirrorClicks: d.mirrorClicks,
     mirrorHover: d.mirrorHover,
+    showCursor: d.showCursor,
     lastKnownScrollX: 0,
     lastKnownScrollY: 0,
     lastSourceTabId: null,
@@ -655,7 +717,7 @@ async function scanWindow(windowId = null) {
     const leftTab = splitTabs.find((tab) => tab.id === leftTabId) || sorted[0];
     const rightTab = splitTabs.find((tab) => tab.id === rightTabId) || sorted[1];
 
-    state.groups[key] = {
+    const next = {
       groupKey: key,
       splitViewId,
       windowId: groupWindowId,
@@ -668,6 +730,7 @@ async function scanWindow(windowId = null) {
       syncNavigation: typeof existing.syncNavigation === 'boolean' ? existing.syncNavigation : groupDefaults.syncNavigation,
       mirrorClicks: typeof existing.mirrorClicks === 'boolean' ? existing.mirrorClicks : groupDefaults.mirrorClicks,
       mirrorHover: typeof existing.mirrorHover === 'boolean' ? existing.mirrorHover : groupDefaults.mirrorHover,
+      showCursor: typeof existing.showCursor === 'boolean' ? existing.showCursor : groupDefaults.showCursor,
       lastKnownScrollX: Number(existing.lastKnownScrollX || 0),
       lastKnownScrollY: Number(existing.lastKnownScrollY || 0),
       lastSourceTabId: existing.lastSourceTabId ?? null,
@@ -685,6 +748,16 @@ async function scanWindow(windowId = null) {
       error: null,
       updatedAt: Date.now()
     };
+
+    // Update the pair's object in place instead of replacing it. Handlers
+    // that looked the group up before an await (Start sync, pause, reload)
+    // keep a reference to it; with a replaced object their changes, such as
+    // enabled = true, landed on a detached copy and were silently lost when
+    // another event (tab activation, a content script saying READY, the
+    // popup asking for status) re-scanned the window in between.
+    const current = state.groups[key];
+    if (current && samePair) Object.assign(current, next);
+    else state.groups[key] = next;
 
     state.tabToGroupKey[String(leftTabId)] = key;
     state.tabToGroupKey[String(rightTabId)] = key;
@@ -823,19 +896,24 @@ async function enableCurrentSplitView(tabId, windowId) {
     return;
   }
 
+  // Both panes need a live content script before the pair is switched on, so
+  // the first state, scroll and alignment reach them. Tabs that were open
+  // before the extension was installed or updated get it injected here.
+  await Promise.all(groupTabIds(group).map((id) => ensureContentScript(id)));
+
   await pinPairOrigins(group);
   group.enabled = true;
   group.error = null;
   group.navigationLocks = {};
   group.hideWpAdminBar = typeof group.hideWpAdminBar === 'boolean' ? group.hideWpAdminBar : DEFAULT_HIDE_WP_ADMIN_BAR;
+  await reconcileReloading(group);
 
   await saveStateNow();
   await sendGroupState(group);
   await alignPeerToSource(group, tabId);
   await sendGroupState(group);
 
-  // Re-send state after a short delay in case the peer tab's content script
-  // wasn't ready to receive the first send (e.g. on first split view setup).
+  // Safety net: re-send the state once more shortly after.
   const groupKey = group.groupKey;
   setTimeout(async () => {
     const state = await getState();
@@ -851,6 +929,7 @@ async function enableAllSplitViewsInCurrentWindow() {
 
   for (const group of Object.values(state.groups)) {
     if (activeWindowId != null && group.windowId !== activeWindowId) continue;
+    await Promise.all(groupTabIds(group).map((id) => ensureContentScript(id)));
     await pinPairOrigins(group);
     group.enabled = true;
     group.error = null;
@@ -979,6 +1058,93 @@ async function setGroupBooleanOption(tabId, windowId, optionName, value) {
   await sendGroupState(group);
 }
 
+// ---- "Reloading" status ------------------------------------------------------
+// A pane is marked reloading when Chrome reports it loading and unmarked when
+// it reports complete or its content script says READY. Tab events are
+// handled one after another per tab (runForTab), so a slow "loading" handler
+// can no longer set the mark after "complete" already cleared it. As a safety
+// net every mark is re-checked against the real tab status a few times and
+// dropped at the latest after the last delay.
+
+const reloadingRecheckTimers = new Map();
+
+function cancelReloadingRechecks(tabId) {
+  const timers = reloadingRecheckTimers.get(tabId);
+  if (timers) for (const timer of timers) clearTimeout(timer);
+  reloadingRecheckTimers.delete(tabId);
+}
+
+function markTabReloading(group, tabId) {
+  if (!group.isReloadingTabs || typeof group.isReloadingTabs !== 'object') group.isReloadingTabs = {};
+  group.isReloadingTabs[String(tabId)] = Date.now();
+  cancelReloadingRechecks(tabId);
+  const groupKey = group.groupKey;
+  const last = RELOADING_RECHECK_DELAYS.length - 1;
+  reloadingRecheckTimers.set(tabId, RELOADING_RECHECK_DELAYS.map((delay, index) => setTimeout(() => {
+    recheckReloadingTab(groupKey, tabId, index === last).catch((error) => debug('reloading recheck failed', error));
+  }, delay)));
+}
+
+// Returns true when a mark was removed.
+function clearTabReloading(group, tabId) {
+  cancelReloadingRechecks(tabId);
+  const key = String(tabId);
+  if (!group?.isReloadingTabs || !Object.prototype.hasOwnProperty.call(group.isReloadingTabs, key)) return false;
+  delete group.isReloadingTabs[key];
+  return true;
+}
+
+async function recheckReloadingTab(groupKey, tabId, force) {
+  const state = await getState();
+  const group = state.groups[groupKey];
+  if (!group || !group.isReloadingTabs?.[String(tabId)]) return;
+
+  const tab = await safeGetTab(tabId);
+  if (!force && tab && tab.status === 'loading') return;
+
+  clearTabReloading(group, tabId);
+  scheduleSaveState();
+  await sendGroupState(group);
+  if (group.enabled && tab && isNormalHttpUrl(tab.url)) await alignTabToPeer(group, tabId);
+}
+
+// Drops marks of panes that are no longer loading (or were marked too long
+// ago). Used when the popup or a page asks for the status, which also covers
+// a service worker restart that lost the recheck timers.
+async function reconcileReloading(group) {
+  if (!group?.isReloadingTabs) return false;
+  const maxAge = RELOADING_RECHECK_DELAYS[RELOADING_RECHECK_DELAYS.length - 1];
+  let changed = false;
+  for (const key of Object.keys(group.isReloadingTabs)) {
+    const markedAt = Number(group.isReloadingTabs[key]) || 0;
+    const tab = await safeGetTab(Number(key));
+    if (!tab || tab.status !== 'loading' || Date.now() - markedAt > maxAge) {
+      if (clearTabReloading(group, Number(key))) changed = true;
+    }
+  }
+  if (changed) scheduleSaveState();
+  return changed;
+}
+
+// Tab events and READY messages of one tab are processed in order. A task
+// that hangs (for example injecting into a page that never loads) releases
+// the queue after a timeout.
+const TAB_TASK_TIMEOUT_MS = 10000;
+const tabTaskQueues = new Map();
+
+function runForTab(tabId, task) {
+  const previous = tabTaskQueues.get(tabId) || Promise.resolve();
+  const next = previous.then(() => Promise.race([
+    Promise.resolve().then(task),
+    new Promise((resolve) => setTimeout(resolve, TAB_TASK_TIMEOUT_MS))
+  ])).catch((error) => debug('tab task failed', tabId, error));
+  tabTaskQueues.set(tabId, next);
+  next.then(() => {
+    if (tabTaskQueues.get(tabId) === next) tabTaskQueues.delete(tabId);
+  });
+  return next;
+}
+
 async function reloadPane(tabId, windowId, pane, bypassCache) {
   await scanWindow(windowId);
   const group = await getGroupForTab(tabId, windowId);
@@ -988,8 +1154,7 @@ async function reloadPane(tabId, windowId, pane, bypassCache) {
   if (group && pane === 'right') targetTabId = group.rightTabId;
 
   if (group) {
-    group.isReloadingTabs = group.isReloadingTabs || {};
-    group.isReloadingTabs[String(targetTabId)] = true;
+    markTabReloading(group, targetTabId);
     group.error = null;
     await saveStateNow();
     await sendGroupState(group);
@@ -1000,7 +1165,7 @@ async function reloadPane(tabId, windowId, pane, bypassCache) {
   } catch (error) {
     debug('tabs.reload failed', targetTabId, error?.message || error);
     if (group) {
-      delete group.isReloadingTabs[String(targetTabId)];
+      clearTabReloading(group, targetTabId);
       group.error = 'Could not reload pane';
       await saveStateNow();
       await sendGroupState(group);
@@ -1197,6 +1362,44 @@ async function handleHoverClearMessage(sender) {
   });
 }
 
+function clampNumber(value, min, max) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return min;
+  return Math.max(min, Math.min(max, n));
+}
+
+// Pointer position for the virtual cursor in the other pane. Only numbers
+// leave the page: the viewport point, the viewport size and the kind of
+// event. The sender must be on its pinned origin; the receiving pane checks
+// its own origin against `targetOrigin` before drawing anything.
+async function handlePointerMessage(sender, message) {
+  const tabId = sender.tab?.id;
+  const windowId = sender.tab?.windowId;
+  if (typeof tabId !== 'number' || typeof windowId !== 'number') return;
+
+  const group = await getGroupForTab(tabId, windowId);
+  if (!group || !group.enabled || !group.showCursor || !group.originsPinned) return;
+  if (getOrigin(sender.url || sender.tab?.url) !== pinnedOriginFor(group, tabId)) return;
+
+  const targetTabId = getPeerTabId(group, tabId);
+  const targetOrigin = pinnedOriginFor(group, targetTabId);
+  if (!targetTabId || !targetOrigin) return;
+
+  const raw = plainObjectOr(message.pointer);
+  const kind = ['move', 'down', 'leave'].includes(raw.kind) ? raw.kind : 'move';
+  await safeSendMessage(targetTabId, {
+    type: MSG.REMOTE_POINTER,
+    targetOrigin,
+    pointer: {
+      kind,
+      clientX: clampNumber(raw.clientX, -10000, 100000),
+      clientY: clampNumber(raw.clientY, -10000, 100000),
+      vw: clampNumber(raw.vw, 0, 100000),
+      vh: clampNumber(raw.vh, 0, 100000)
+    }
+  });
+}
+
 async function handleGetSplitStatusMessage(sender) {
   const tabId = sender.tab?.id;
   const windowId = sender.tab?.windowId;
@@ -1214,6 +1417,8 @@ async function handleGetSplitStatusMessage(sender) {
     await sendHiddenState(tabId);
     return buildHiddenState();
   }
+
+  if (await reconcileReloading(group)) sendGroupState(group).catch(() => undefined);
 
   const show = await shouldShowFloatingUi(group);
   const state = buildUiStateForTab(group, tabId, show);
@@ -1251,6 +1456,11 @@ async function handleReadyMessage(sender, message) {
     return;
   }
 
+  // The page's content script is running, so this pane finished loading as
+  // far as sync is concerned (also after a bfcache restore, where Chrome may
+  // not report a new "complete").
+  const wasReloading = clearTabReloading(group, tabId);
+
   if (Number.isFinite(message.scrollX)) group.lastKnownScrollX = Math.max(0, message.scrollX);
   if (Number.isFinite(message.scrollY)) group.lastKnownScrollY = Math.max(0, message.scrollY);
   if (isNormalHttpUrl(message.url)) {
@@ -1268,7 +1478,9 @@ async function handleReadyMessage(sender, message) {
   }
 
   await saveStateNow();
-  await sendGroupState(group, tabId);
+  // The peer's panel shows the pair status too; refresh both when this pane
+  // stopped reloading.
+  await sendGroupState(group, wasReloading ? null : tabId);
 
   if (group.enabled) {
     await alignTabToPeer(group, tabId);
@@ -1341,6 +1553,9 @@ async function handleUiCommand(sender, command, message = {}) {
     case CMD.SET_HOVER_MIRRORING:
       await setGroupBooleanOption(tabId, windowId, 'mirrorHover', Boolean(message.value));
       break;
+    case CMD.SET_SHOW_CURSOR:
+      await setGroupBooleanOption(tabId, windowId, 'showCursor', Boolean(message.value));
+      break;
     default:
       debug('Unknown UI command', command);
   }
@@ -1363,6 +1578,7 @@ function summarizeGroupForPopup(group) {
     syncNavigation: Boolean(group.syncNavigation),
     mirrorClicks: Boolean(group.mirrorClicks),
     mirrorHover: Boolean(group.mirrorHover),
+    showCursor: Boolean(group.showCursor),
     hideWpAdminBar: Boolean(group.hideWpAdminBar),
     rulerCount: Array.isArray(group.rulers) ? group.rulers.length : 0
   };
@@ -1389,6 +1605,7 @@ async function getPopupStatus() {
 
   await scanWindow(activeTab.windowId);
   const group = await getGroupForTab(activeTab.id, activeTab.windowId);
+  if (group && await reconcileReloading(group)) sendGroupState(group).catch(() => undefined);
   const buttonShownForCurrent = group ? await shouldShowFloatingUi(group) : false;
   const manualButtonOverride = group ? await getManualButtonOverride(group.groupKey) : 'default';
 
@@ -1554,7 +1771,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     if (message.type === MSG.READY) {
-      await handleReadyMessage(sender, message);
+      await runForTab(sender.tab.id, () => handleReadyMessage(sender, message));
+      sendResponse({ ok: true });
+      return;
+    }
+
+    if (message.type === MSG.POINTER) {
+      await handlePointerMessage(sender, message);
       sendResponse({ ok: true });
       return;
     }
@@ -1629,8 +1852,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const current = await getSettings();
       const incoming = message.defaults && typeof message.defaults === 'object' ? message.defaults : {};
       const next = { ...current };
-      const allowed = ['defaultHideWpAdminBar', 'defaultSyncNavigation', 'defaultMirrorClicks', 'defaultMirrorHover'];
-      for (const field of allowed) {
+      for (const field of SETTINGS_DEFAULT_FIELDS) {
         if (typeof incoming[field] === 'boolean') next[field] = incoming[field];
       }
       await saveSettings(next);
@@ -1731,54 +1953,64 @@ chrome.commands.onCommand.addListener((command) => {
   })().catch((error) => debug('commands.onCommand error', error));
 });
 
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  (async () => {
-    if (!tab || typeof tab.windowId !== 'number') return;
-
-    if (changeInfo.splitViewId !== undefined || changeInfo.url !== undefined) {
-      await refreshWindowUi(tab.windowId);
-    }
-
-    // Every URL change is checked against the pinned origins, also changes to
-    // non-http pages (those pause an enabled pair).
-    if (changeInfo.url) {
-      await handleNavigationFromTab(tabId, tab.windowId, changeInfo.url);
-    }
-
-    if (changeInfo.status === 'loading') {
-      const group = await getGroupForTab(tabId, tab.windowId);
-      if (group?.enabled) {
-        group.isReloadingTabs = group.isReloadingTabs || {};
-        group.isReloadingTabs[String(tabId)] = true;
-        group.error = null;
-        await saveStateNow();
-        await sendGroupState(group);
-      }
-    }
-
-    if (changeInfo.status === 'complete') {
-      await scanWindow(tab.windowId);
-      const group = await getGroupForTab(tabId, tab.windowId);
-
-      if (!group) {
-        if (isNormalHttpUrl(tab.url)) await sendHiddenState(tabId);
-        return;
-      }
-
-      group.isReloadingTabs = group.isReloadingTabs || {};
-      delete group.isReloadingTabs[String(tabId)];
+async function handleTabUpdated(tabId, changeInfo, tab) {
+  // Mark the pane as reloading before any slow work for this event, and
+  // only from this per-tab queue, so the matching "complete" (processed
+  // after this task) always clears it.
+  if (changeInfo.status === 'loading') {
+    const group = await getGroupForTab(tabId, tab.windowId);
+    if (group?.enabled) {
+      markTabReloading(group, tabId);
       group.error = null;
+      scheduleSaveState();
+    }
+  }
+
+  if (changeInfo.splitViewId !== undefined || changeInfo.url !== undefined) {
+    await refreshWindowUi(tab.windowId);
+  }
+
+  // Every URL change is checked against the pinned origins, also changes to
+  // non-http pages (those pause an enabled pair).
+  if (changeInfo.url) {
+    await handleNavigationFromTab(tabId, tab.windowId, changeInfo.url);
+  }
+
+  if (changeInfo.status === 'loading') {
+    const group = await getGroupForTab(tabId, tab.windowId);
+    if (group?.enabled) {
       await saveStateNow();
-
-      if (isNormalHttpUrl(tab.url)) {
-        await ensureContentScript(tabId);
-        await sendGroupState(group, tabId);
-        if (group.enabled) await alignTabToPeer(group, tabId);
-      }
-
       await sendGroupState(group);
     }
-  })().catch((error) => debug('tabs.onUpdated error', error));
+  }
+
+  if (changeInfo.status === 'complete') {
+    await scanWindow(tab.windowId);
+    const group = await getGroupForTab(tabId, tab.windowId);
+
+    if (!group) {
+      cancelReloadingRechecks(tabId);
+      if (isNormalHttpUrl(tab.url)) await sendHiddenState(tabId);
+      return;
+    }
+
+    clearTabReloading(group, tabId);
+    group.error = null;
+    await saveStateNow();
+
+    if (isNormalHttpUrl(tab.url)) {
+      await ensureContentScript(tabId);
+      await sendGroupState(group, tabId);
+      if (group.enabled) await alignTabToPeer(group, tabId);
+    }
+
+    await sendGroupState(group);
+  }
+}
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (!tab || typeof tab.windowId !== 'number') return;
+  runForTab(tabId, () => handleTabUpdated(tabId, changeInfo, tab));
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {

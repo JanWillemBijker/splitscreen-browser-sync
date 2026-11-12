@@ -104,6 +104,12 @@
   "optHoverHelp": {
     "message": "Toont hover-stijlen en hover-menu's aan beide kanten."
   },
+  "optCursor": {
+    "message": "Muiscursor tonen"
+  },
+  "optCursorHelp": {
+    "message": "Toont in de andere helft een aanwijzer waar je muis is. Alleen tonen, nooit klikken."
+  },
   "optWpAdminBar": {
     "message": "WordPress-adminbalk verbergen"
   },

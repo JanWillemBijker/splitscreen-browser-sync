@@ -30,7 +30,8 @@ const defaultToggles = [
   { el: $('defaultHideWpAdminBar'), key: 'defaultHideWpAdminBar', fallbackOn: true },
   { el: $('defaultSyncNavigation'), key: 'defaultSyncNavigation', fallbackOn: true },
   { el: $('defaultMirrorClicks'), key: 'defaultMirrorClicks', fallbackOn: false },
-  { el: $('defaultMirrorHover'), key: 'defaultMirrorHover', fallbackOn: true }
+  { el: $('defaultMirrorHover'), key: 'defaultMirrorHover', fallbackOn: true },
+  { el: $('defaultShowCursor'), key: 'defaultShowCursor', fallbackOn: true }
 ];
 
 let busy = false;
