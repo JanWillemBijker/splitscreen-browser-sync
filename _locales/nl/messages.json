@@ -289,5 +289,11 @@
   },
   "optZoomHelp": {
     "message": "Inzoomen aan de ene kant (Ctrl/⌘ + of −) zoomt de andere kant naar hetzelfde niveau."
+  },
+  "optInput": {
+    "message": "Typen synchroniseren"
+  },
+  "optInputHelp": {
+    "message": "Kopieert wat je typt en kiest in formuliervelden naar het overeenkomende veld aan de andere kant. De andere site ontvangt die tekst. Nooit wachtwoorden, codes, betaal- of bestandsvelden; verstuurt nooit iets."
   }
 }

@@ -24,7 +24,10 @@ const EXTRA_BOOL_OPTIONS = Object.freeze([
   // Scroll inside scroll containers (overflow areas, modals, side panels).
   ['syncContainers', 'defaultSyncContainers', true, 'SET_CONTAINER_SYNC'],
   // Browser zoom level of both panes.
-  ['syncZoom', 'defaultSyncZoom', true, 'SET_ZOOM_SYNC']
+  ['syncZoom', 'defaultSyncZoom', true, 'SET_ZOOM_SYNC'],
+  // Typing and form changes. Off by default: what the user types reaches the
+  // other site.
+  ['syncInput', 'defaultSyncInput', false, 'SET_INPUT_SYNC']
 ]);
 
 // Per-pair options with a fixed set of values.
@@ -86,7 +89,9 @@ const MSG = Object.freeze({
   REMOTE_POINTER: 'SVSS_REMOTE_POINTER',
   ALT_COMMIT: 'SVSS_ALT_COMMIT',
   CONTAINER_SCROLL: 'SVSS_CONTAINER_SCROLL',
-  REMOTE_CONTAINER_SCROLL: 'SVSS_REMOTE_CONTAINER_SCROLL'
+  REMOTE_CONTAINER_SCROLL: 'SVSS_REMOTE_CONTAINER_SCROLL',
+  FIELD_INPUT: 'SVSS_FIELD_INPUT',
+  REMOTE_FIELD_INPUT: 'SVSS_REMOTE_FIELD_INPUT'
 });
 
 const CMD = Object.freeze({
@@ -1593,6 +1598,49 @@ async function handleContainerScrollMessage(sender, message) {
   });
 }
 
+// Typing / form input ("Sync typing", off by default). The content script
+// never sends password, one-time-code, payment, hidden or file fields, nor
+// fields whose name/label looks sensitive, and only from trusted events.
+// Here: only for an enabled pair with the option on, both panes on their
+// pinned origins, and with strict limits on what the payload may contain.
+const FIELD_KINDS = new Set(['text', 'checkbox', 'radio', 'select', 'editable']);
+const MAX_FIELD_VALUE = 20000;
+
+async function handleFieldInputMessage(sender, message) {
+  const tabId = sender.tab?.id;
+  const windowId = sender.tab?.windowId;
+  if (typeof tabId !== 'number' || typeof windowId !== 'number') return;
+
+  const group = await getGroupForTab(tabId, windowId);
+  if (!group || !group.enabled || !group.syncInput) return;
+  if (!(await isPairOnPinnedOrigins(group, tabId, sender.url))) return;
+
+  const raw = plainObjectOr(message.field);
+  if (!FIELD_KINDS.has(raw.kind)) return;
+  if (typeof raw.value === 'string' && raw.value.length > MAX_FIELD_VALUE) return;
+
+  const targetTabId = getPeerTabId(group, tabId);
+  if (!targetTabId) return;
+
+  await safeSendMessage(targetTabId, {
+    type: MSG.REMOTE_FIELD_INPUT,
+    targetOrigin: pinnedOriginFor(group, targetTabId),
+    field: {
+      ...sanitizeDescriptor(raw),
+      kind: raw.kind,
+      eventType: raw.eventType === 'change' ? 'change' : 'input',
+      value: typeof raw.value === 'string' ? raw.value : '',
+      checked: Boolean(raw.checked),
+      values: Array.isArray(raw.values) ? raw.values.filter((v) => typeof v === 'string').slice(0, 200).map((v) => v.slice(0, 500)) : [],
+      name: typeof raw.name === 'string' ? raw.name.slice(0, 200) : '',
+      clientX: clampNumber(raw.clientX, -10000, 100000),
+      clientY: clampNumber(raw.clientY, -10000, 100000),
+      vw: clampNumber(raw.vw, 0, 100000),
+      vh: clampNumber(raw.vh, 0, 100000)
+    }
+  });
+}
+
 // ---- Zoom sync -------------------------------------------------------------
 // When one pane of a syncing pair is zoomed, the other pane gets the same
 // zoom factor. The factor we set is remembered so the resulting
@@ -2032,6 +2080,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     if (message.type === MSG.POINTER) {
       await handlePointerMessage(sender, message);
+      sendResponse({ ok: true });
+      return;
+    }
+
+    if (message.type === MSG.FIELD_INPUT) {
+      await handleFieldInputMessage(sender, message);
       sendResponse({ ok: true });
       return;
     }

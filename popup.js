@@ -39,7 +39,8 @@ const defaultToggles = [
   { el: $('defaultMirrorHover'), key: 'defaultMirrorHover', fallbackOn: true },
   { el: $('defaultShowCursor'), key: 'defaultShowCursor', fallbackOn: true },
   { el: $('defaultSyncContainers'), key: 'defaultSyncContainers', fallbackOn: true },
-  { el: $('defaultSyncZoom'), key: 'defaultSyncZoom', fallbackOn: true }
+  { el: $('defaultSyncZoom'), key: 'defaultSyncZoom', fallbackOn: true },
+  { el: $('defaultSyncInput'), key: 'defaultSyncInput', fallbackOn: false }
 ];
 
 let busy = false;

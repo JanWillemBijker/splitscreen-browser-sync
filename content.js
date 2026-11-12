@@ -42,7 +42,9 @@
     REMOTE_POINTER: 'SVSS_REMOTE_POINTER',
     ALT_COMMIT: 'SVSS_ALT_COMMIT',
     CONTAINER_SCROLL: 'SVSS_CONTAINER_SCROLL',
-    REMOTE_CONTAINER_SCROLL: 'SVSS_REMOTE_CONTAINER_SCROLL'
+    REMOTE_CONTAINER_SCROLL: 'SVSS_REMOTE_CONTAINER_SCROLL',
+    FIELD_INPUT: 'SVSS_FIELD_INPUT',
+    REMOTE_FIELD_INPUT: 'SVSS_REMOTE_FIELD_INPUT'
   });
 
   const CMD = Object.freeze({
@@ -66,7 +68,8 @@
     SET_SHOW_CURSOR: 'SET_SHOW_CURSOR',
     SET_ALIGN_MODE: 'SET_ALIGN_MODE',
     SET_CONTAINER_SYNC: 'SET_CONTAINER_SYNC',
-    SET_ZOOM_SYNC: 'SET_ZOOM_SYNC'
+    SET_ZOOM_SYNC: 'SET_ZOOM_SYNC',
+    SET_INPUT_SYNC: 'SET_INPUT_SYNC'
   });
 
   const HOST_ID = 'svss-root';
@@ -893,6 +896,7 @@
     optionsSection.appendChild(createToggle(t('optCursor', 'Show mouse cursor'), uiState.showCursor, CMD.SET_SHOW_CURSOR));
     optionsSection.appendChild(createToggle(t('optContainers', 'Sync scroll areas'), uiState.syncContainers, CMD.SET_CONTAINER_SYNC));
     optionsSection.appendChild(createToggle(t('optZoom', 'Sync zoom'), uiState.syncZoom, CMD.SET_ZOOM_SYNC));
+    optionsSection.appendChild(createToggle(t('optInput', 'Sync typing'), uiState.syncInput, CMD.SET_INPUT_SYNC));
     optionsSection.appendChild(createToggle(t('optWpAdminBar', 'Hide WordPress admin bar'), uiState.hideWpAdminBar, CMD.SET_WP_ADMIN_BAR));
     panel.appendChild(optionsSection);
 
@@ -2255,6 +2259,185 @@
     }
   }
 
+  // ---- Sync typing / form input ----------------------------------------------
+  // Off by default. Mirrors what is typed into text fields, textareas and
+  // contenteditable areas, and checkbox/radio/select changes, into the
+  // matching field on the other side. Never: password, one-time-code, payment
+  // card, hidden, file and button inputs, or any field whose name/label looks
+  // sensitive (isSensitiveField). Only trusted events, only while the pair
+  // syncs on its pinned origins. Values are set directly and announced with
+  // input/change events; nothing is clicked or submitted, no key is pressed.
+  const NEVER_SYNC_INPUT_TYPES = new Set(['password', 'hidden', 'file', 'submit', 'button', 'reset', 'image', 'color', 'range']);
+  const MAX_FIELD_VALUE = 20000;
+  const pendingFieldEvents = new Map();
+  let fieldRafPending = false;
+
+  function editingHostOf(element) {
+    if (!(element instanceof Element) || !element.isContentEditable) return null;
+    let node = element;
+    while (node.parentElement && node.parentElement.isContentEditable) node = node.parentElement;
+    return node;
+  }
+
+  function fieldKindOf(element) {
+    if (!(element instanceof Element)) return null;
+    const tag = element.tagName.toLowerCase();
+    if (tag === 'input') {
+      const type = (element.getAttribute('type') || 'text').toLowerCase();
+      if (NEVER_SYNC_INPUT_TYPES.has(type)) return null;
+      if (type === 'checkbox') return 'checkbox';
+      if (type === 'radio') return 'radio';
+      return 'text';
+    }
+    if (tag === 'textarea') return 'text';
+    if (tag === 'select') return 'select';
+    if (element.isContentEditable) return 'editable';
+    return null;
+  }
+
+  function isSyncableField(element) {
+    if (!(element instanceof Element) || isOurHost(element)) return false;
+    if (!fieldKindOf(element)) return false;
+    return !isSensitiveField(element);
+  }
+
+  function readFieldPayload(element, eventType) {
+    const kind = fieldKindOf(element);
+    const payload = { ...buildElementDescriptor(element), kind, eventType };
+    const rect = element.getBoundingClientRect();
+    Object.assign(payload, {
+      clientX: rect.left + rect.width / 2,
+      clientY: rect.top + Math.min(rect.height / 2, 20),
+      vw: window.innerWidth || 0,
+      vh: window.innerHeight || 0
+    });
+    if (kind === 'text') payload.value = String(element.value ?? '');
+    else if (kind === 'editable') payload.value = String(element.innerText ?? '');
+    else if (kind === 'checkbox') payload.checked = Boolean(element.checked);
+    else if (kind === 'radio') {
+      payload.checked = Boolean(element.checked);
+      payload.name = element.getAttribute('name') || '';
+      payload.value = element.getAttribute('value') ?? 'on';
+    } else if (kind === 'select') {
+      payload.values = Array.from(element.selectedOptions || []).map((option) => option.value);
+    }
+    if (typeof payload.value === 'string' && payload.value.length > MAX_FIELD_VALUE) return null;
+    return payload;
+  }
+
+  function flushFieldEvents() {
+    fieldRafPending = false;
+    if (!uiState.enabled || !uiState.syncInput) {
+      pendingFieldEvents.clear();
+      return;
+    }
+    for (const [element, eventType] of pendingFieldEvents) {
+      if (!element.isConnected || !isSyncableField(element)) continue;
+      const field = readFieldPayload(element, eventType);
+      if (field) sendRuntimeMessage({ type: MSG.FIELD_INPUT, field });
+    }
+    pendingFieldEvents.clear();
+  }
+
+  function handleLocalFieldEvent(event) {
+    if (!uiState.enabled || !uiState.syncInput) return;
+    if (!event.isTrusted) return;            // our own replays are untrusted: no echo
+    if (isInsideExtensionUi(event) || isInsideRulerUi(event)) return;
+    let element = event.target instanceof Element ? event.target : null;
+    if (element?.isContentEditable) element = editingHostOf(element);
+    if (!element || !isSyncableField(element)) return;
+    const kind = fieldKindOf(element);
+    // Text is sent while typing; toggles and selects when they change.
+    if (event.type === 'input' && (kind === 'checkbox' || kind === 'radio' || kind === 'select')) return;
+    const previous = pendingFieldEvents.get(element);
+    pendingFieldEvents.set(element, previous === 'change' ? 'change' : event.type);
+    if (fieldRafPending) return;
+    fieldRafPending = true;
+    requestAnimationFrame(flushFieldEvents);
+  }
+
+  function resolveFieldTarget(payload) {
+    const kind = payload.kind;
+    if (kind === 'radio') {
+      const radios = Array.from(document.querySelectorAll('input[type="radio"]'))
+        .filter((radio) => (radio.getAttribute('name') || '') === payload.name && (radio.getAttribute('value') ?? 'on') === payload.value);
+      const { x, y } = mirroredPointToLocal(payload);
+      return pickClosestToPoint(radios.filter(isElementVisible), x, y) || radios[0] || null;
+    }
+    const candidates = Array.isArray(payload.candidates) ? payload.candidates : [];
+    const fits = (element) => fieldKindOf(element) === kind && isSyncableField(element);
+    const { x, y } = mirroredPointToLocal(payload);
+    for (const strongPass of [true, false]) {
+      for (const candidate of candidates) {
+        if (Boolean(candidate.strong) !== strongPass) continue;
+        const matches = matchAllElements(candidate).filter(fits);
+        if (matches.length) return pickClosestToPoint(matches, x, y);
+      }
+    }
+    let element = elementAtMirroredPoint(payload);
+    if (element?.isContentEditable) element = editingHostOf(element);
+    return element && fits(element) ? element : null;
+  }
+
+  function announceFieldChange(element, eventType) {
+    try {
+      element.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+      if (eventType === 'change' || fieldKindOf(element) !== 'text') {
+        element.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    } catch (_error) {}
+  }
+
+  function applyRemoteFieldInput(payload) {
+    if (!uiState.enabled || !uiState.syncInput || !payload) return;
+    const element = resolveFieldTarget(payload);
+    if (!element || element.disabled || element.readOnly) return;
+    if (!isSyncableField(element)) return;
+
+    const kind = payload.kind;
+    if (kind === 'text') {
+      if (element.value === payload.value) return;
+      element.value = payload.value;
+      announceFieldChange(element, payload.eventType);
+    } else if (kind === 'checkbox') {
+      if (element.checked === Boolean(payload.checked)) return;
+      element.checked = Boolean(payload.checked);
+      announceFieldChange(element, 'change');
+    } else if (kind === 'radio') {
+      if (!payload.checked || element.checked) return;
+      element.checked = true;
+      announceFieldChange(element, 'change');
+    } else if (kind === 'select') {
+      const wanted = new Set(Array.isArray(payload.values) ? payload.values : []);
+      let changed = false;
+      for (const option of Array.from(element.options || [])) {
+        const select = wanted.has(option.value);
+        if (option.selected !== select) { option.selected = select; changed = true; }
+      }
+      if (changed) announceFieldChange(element, 'change');
+    } else if (kind === 'editable') {
+      if (normalizeText(element.innerText) === normalizeText(payload.value)) return;
+      // Replace the text through the editing pipeline when possible so
+      // editors notice it; plain text only, never HTML.
+      let done = false;
+      try {
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        selection.removeAllRanges();
+        selection.addRange(range);
+        done = document.execCommand('insertText', false, payload.value);
+        selection.removeAllRanges();
+      } catch (_error) {
+        done = false;
+      }
+      if (!done) {
+        element.textContent = payload.value;
+        announceFieldChange(element, 'input');
+      }
+    }
+  }
+
   // ---- Ruler lines ----------------------------------------------------------
 
   // Rulers and their settings bar live in their own fresh host with a closed
@@ -3161,7 +3344,7 @@
         sendResponse({ ok: true, stale: true });
         return false;
       }
-      uiState = { ...uiState, show: false, enabled: false, wpAdminBarHidden: false, mirrorClicks: false, mirrorHover: false, showCursor: false };
+      uiState = { ...uiState, show: false, enabled: false, wpAdminBarHidden: false, mirrorClicks: false, mirrorHover: false, showCursor: false, syncContainers: false, syncZoom: false, syncInput: false };
       rulers = [];
       renderRulers();
       updateUi();
@@ -3177,6 +3360,12 @@
 
     if (message.type === MSG.REMOTE_SCROLL) {
       applyRemoteScroll(message.targetScrollX, resolveAnchoredScrollY(message));
+      sendResponse({ ok: true });
+      return false;
+    }
+
+    if (message.type === MSG.REMOTE_FIELD_INPUT) {
+      if (isForThisOrigin(message)) applyRemoteFieldInput(message.field);
       sendResponse({ ok: true });
       return false;
     }
@@ -3271,6 +3460,8 @@
   window.addEventListener('blur', () => setAltDecoupled(false), true);
   document.addEventListener('click', handleLocalClick, true);
   document.addEventListener('focusin', handleLocalFocusIn, true);
+  document.addEventListener('input', handleLocalFieldEvent, true);
+  document.addEventListener('change', handleLocalFieldEvent, true);
   document.addEventListener('pointermove', handleLocalPointerMove, true);
   document.addEventListener('pointermove', handleCursorPointerMove, true);
   document.addEventListener('pointerdown', handleCursorPointerDown, true);

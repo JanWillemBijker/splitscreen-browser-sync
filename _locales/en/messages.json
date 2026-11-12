@@ -289,5 +289,11 @@
   },
   "optZoomHelp": {
     "message": "Zooming one side (Ctrl/⌘ + or −) zooms the other side to the same level."
+  },
+  "optInput": {
+    "message": "Sync typing"
+  },
+  "optInputHelp": {
+    "message": "Copies what you type and pick in form fields to the matching field on the other side. The other site receives that text. Never passwords, codes, payment or file fields; never submits."
   }
 }
