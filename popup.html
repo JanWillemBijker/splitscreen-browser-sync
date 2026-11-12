@@ -7,69 +7,139 @@
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <main class="popup">
-    <header class="header">
-      <img src="icons/icon32.png" alt="" class="logo">
-      <div>
-        <h1>SplitScreen Browser Sync</h1>
-        <p id="statusText">Loading…</p>
-      </div>
+  <main class="popup" data-state="loading">
+    <header class="masthead">
+      <img src="icons/icon32.png" alt="" class="masthead-logo" width="24" height="24">
+      <h1 class="masthead-title" data-i18n="extName">SplitScreen Browser Sync</h1>
+      <span class="masthead-version" id="version"></span>
     </header>
 
-    <section class="section">
-      <h2>Settings</h2>
+    <!-- Status of the active tab's Split View pair. -->
+    <section class="status" aria-labelledby="statusTitle">
+      <div class="status-row">
+        <svg class="pair" viewBox="0 0 76 44" aria-hidden="true" focusable="false">
+          <rect class="pair-pane" x="1" y="1" width="30" height="42" rx="5"/>
+          <rect class="pair-pane" x="45" y="1" width="30" height="42" rx="5"/>
+          <g class="pair-lines">
+            <rect x="6" y="8" width="16" height="3" rx="1.5"/>
+            <rect x="6" y="15" width="20" height="3" rx="1.5"/>
+            <rect x="6" y="22" width="12" height="3" rx="1.5"/>
+            <rect x="50" y="8" width="16" height="3" rx="1.5"/>
+            <rect x="50" y="15" width="20" height="3" rx="1.5"/>
+            <rect x="50" y="22" width="12" height="3" rx="1.5"/>
+          </g>
+          <path class="pair-link" d="M31 22h14"/>
+          <circle class="pair-node" cx="38" cy="22" r="4"/>
+        </svg>
+        <div class="status-text" role="status" aria-live="polite">
+          <h2 class="status-title" id="statusTitle"></h2>
+          <p class="status-body" id="statusBody"></p>
+          <p class="status-meta" id="statusMeta" hidden></p>
+        </div>
+      </div>
 
-      <label class="toggle-row">
-        <input id="alwaysShow" type="checkbox">
-        <span class="switch" aria-hidden="true"></span>
-        <span>Always show button on split screen</span>
-      </label>
+      <button id="syncToggle" type="button" class="btn btn-primary" hidden></button>
 
-      <button id="showCurrent" type="button" class="primary-button">
-        Show button on current split screen
-      </button>
-
-      <p id="hint" class="hint" hidden></p>
+      <ol class="steps" id="emptySteps" hidden>
+        <li data-i18n="emptyStep1"></li>
+        <li data-i18n="emptyStep2"></li>
+        <li data-i18n="emptyStep3"></li>
+      </ol>
     </section>
 
-    <section class="section section-spaced">
-      <h2>Rulers</h2>
-      <button id="addRuler" type="button" class="primary-button">
-        + Add ruler
-      </button>
+    <!-- Options for the current pair; only shown when in a valid Split View. -->
+    <section class="group" id="currentGroup" aria-labelledby="currentGroupTitle" hidden>
+      <div class="group-head">
+        <h2 class="group-title" id="currentGroupTitle" data-i18n="sectionThisSplit"></h2>
+        <p class="group-help" data-i18n="sectionThisSplitHelp"></p>
+      </div>
+
+      <div class="options">
+        <label class="option">
+          <span class="option-text">
+            <span class="option-label" data-i18n="optNavigation"></span>
+            <span class="option-help" data-i18n="optNavigationHelp"></span>
+          </span>
+          <input type="checkbox" class="switch" data-group-option="syncNavigation">
+        </label>
+        <label class="option">
+          <span class="option-text">
+            <span class="option-label" data-i18n="optClicks"></span>
+            <span class="option-help" data-i18n="optClicksHelp"></span>
+          </span>
+          <input type="checkbox" class="switch" data-group-option="mirrorClicks">
+        </label>
+        <label class="option">
+          <span class="option-text">
+            <span class="option-label" data-i18n="optHover"></span>
+            <span class="option-help" data-i18n="optHoverHelp"></span>
+          </span>
+          <input type="checkbox" class="switch" data-group-option="mirrorHover">
+        </label>
+        <label class="option">
+          <span class="option-text">
+            <span class="option-label" data-i18n="optWpAdminBar"></span>
+            <span class="option-help" data-i18n="optWpAdminBarHelp"></span>
+          </span>
+          <input type="checkbox" class="switch" data-group-option="hideWpAdminBar">
+        </label>
+      </div>
+
+      <div class="actions">
+        <button id="addRuler" type="button" class="btn btn-secondary">
+          <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M2 8h12M8 4v8" /></svg>
+          <span data-i18n="btnAddRuler"></span>
+        </button>
+        <button id="showCurrent" type="button" class="btn btn-secondary"></button>
+      </div>
     </section>
 
-    <section class="section section-spaced">
-      <h2>Defaults for new sessions</h2>
+    <details class="group group-collapsible" id="defaultsGroup">
+      <summary class="group-summary">
+        <span class="group-title" data-i18n="sectionDefaults"></span>
+        <svg class="chevron" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M6 4l4 4-4 4"/></svg>
+      </summary>
+      <p class="group-help" data-i18n="sectionDefaultsHelp"></p>
+      <div class="options">
+        <label class="option">
+          <span class="option-text"><span class="option-label" data-i18n="optNavigation"></span></span>
+          <input id="defaultSyncNavigation" type="checkbox" class="switch">
+        </label>
+        <label class="option">
+          <span class="option-text"><span class="option-label" data-i18n="optClicks"></span></span>
+          <input id="defaultMirrorClicks" type="checkbox" class="switch">
+        </label>
+        <label class="option">
+          <span class="option-text"><span class="option-label" data-i18n="optHover"></span></span>
+          <input id="defaultMirrorHover" type="checkbox" class="switch">
+        </label>
+        <label class="option">
+          <span class="option-text"><span class="option-label" data-i18n="optWpAdminBar"></span></span>
+          <input id="defaultHideWpAdminBar" type="checkbox" class="switch">
+        </label>
+      </div>
+    </details>
 
-      <label class="toggle-row">
-        <input id="defaultHideWpAdminBar" type="checkbox">
-        <span class="switch" aria-hidden="true"></span>
-        <span>Hide WordPress admin bar</span>
-      </label>
+    <details class="group group-collapsible" id="buttonGroup">
+      <summary class="group-summary">
+        <span class="group-title" data-i18n="sectionButton"></span>
+        <svg class="chevron" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M6 4l4 4-4 4"/></svg>
+      </summary>
+      <div class="options">
+        <label class="option">
+          <span class="option-text">
+            <span class="option-label" data-i18n="optAlwaysShow"></span>
+            <span class="option-help" data-i18n="optAlwaysShowHelp"></span>
+          </span>
+          <input id="alwaysShow" type="checkbox" class="switch">
+        </label>
+      </div>
+    </details>
 
-      <label class="toggle-row">
-        <input id="defaultSyncNavigation" type="checkbox">
-        <span class="switch" aria-hidden="true"></span>
-        <span>Sync navigation</span>
-      </label>
-
-      <label class="toggle-row">
-        <input id="defaultMirrorClicks" type="checkbox">
-        <span class="switch" aria-hidden="true"></span>
-        <span>Mirror clicks</span>
-      </label>
-
-      <label class="toggle-row">
-        <input id="defaultMirrorHover" type="checkbox">
-        <span class="switch" aria-hidden="true"></span>
-        <span>Mirror hover effects</span>
-      </label>
-
-      <p class="hint">Applied to each new split screen pairing. Change the current split from its on-page panel.</p>
-    </section>
-
-    <footer id="footerMeta" class="footer-meta"></footer>
+    <footer class="footer">
+      <button id="openShortcuts" type="button" class="link-button" data-i18n="footerShortcuts"></button>
+      <span class="credit"><span data-i18n="footerMadeBy"></span> <a href="https://bijbijker.nl" target="_blank" rel="noopener noreferrer">BijBijker</a></span>
+    </footer>
   </main>
 
   <script src="popup.js"></script>

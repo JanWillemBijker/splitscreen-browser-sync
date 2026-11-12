@@ -5,24 +5,53 @@ const MSG = Object.freeze({
   POPUP_SET_ALWAYS_SHOW: 'SVSS_POPUP_SET_ALWAYS_SHOW',
   POPUP_SET_DEFAULTS: 'SVSS_POPUP_SET_DEFAULTS',
   POPUP_SHOW_BUTTON_CURRENT: 'SVSS_POPUP_SHOW_BUTTON_CURRENT',
+  POPUP_SET_SYNC: 'SVSS_POPUP_SET_SYNC',
+  POPUP_SET_GROUP_OPTION: 'SVSS_POPUP_SET_GROUP_OPTION',
   POPUP_RULER_ADD: 'SVSS_POPUP_RULER_ADD'
 });
 
-const alwaysShow = document.getElementById('alwaysShow');
-const showCurrent = document.getElementById('showCurrent');
-const addRuler = document.getElementById('addRuler');
-const hint = document.getElementById('hint');
-const statusText = document.getElementById('statusText');
-const footerMeta = document.getElementById('footerMeta');
+const $ = (id) => document.getElementById(id);
+
+const root = document.querySelector('.popup');
+const statusTitle = $('statusTitle');
+const statusBody = $('statusBody');
+const statusMeta = $('statusMeta');
+const syncToggle = $('syncToggle');
+const emptySteps = $('emptySteps');
+const currentGroup = $('currentGroup');
+const alwaysShow = $('alwaysShow');
+const showCurrent = $('showCurrent');
+const addRuler = $('addRuler');
+const groupOptionInputs = Array.from(document.querySelectorAll('[data-group-option]'));
 
 // Per-group option defaults applied to each new split screen pairing.
 // Each entry maps a checkbox element to the settings field that stores it.
 const defaultToggles = [
-  { el: document.getElementById('defaultHideWpAdminBar'), key: 'defaultHideWpAdminBar', fallbackOn: true },
-  { el: document.getElementById('defaultSyncNavigation'), key: 'defaultSyncNavigation', fallbackOn: true },
-  { el: document.getElementById('defaultMirrorClicks'), key: 'defaultMirrorClicks', fallbackOn: true },
-  { el: document.getElementById('defaultMirrorHover'), key: 'defaultMirrorHover', fallbackOn: true }
+  { el: $('defaultHideWpAdminBar'), key: 'defaultHideWpAdminBar', fallbackOn: true },
+  { el: $('defaultSyncNavigation'), key: 'defaultSyncNavigation', fallbackOn: true },
+  { el: $('defaultMirrorClicks'), key: 'defaultMirrorClicks', fallbackOn: true },
+  { el: $('defaultMirrorHover'), key: 'defaultMirrorHover', fallbackOn: true }
 ];
+
+let busy = false;
+let lastStatus = null;
+
+function t(key, substitutions) {
+  try {
+    return chrome.i18n.getMessage(key, substitutions) || '';
+  } catch (_error) {
+    return '';
+  }
+}
+
+function localize() {
+  const lang = chrome.i18n.getUILanguage ? chrome.i18n.getUILanguage() : 'en';
+  document.documentElement.lang = String(lang || 'en').split('-')[0];
+  for (const el of document.querySelectorAll('[data-i18n]')) {
+    const text = t(el.dataset.i18n);
+    if (text) el.textContent = text;
+  }
+}
 
 async function sendMessage(message) {
   try {
@@ -32,7 +61,34 @@ async function sendMessage(message) {
   }
 }
 
+function formatSigned(value) {
+  const n = Math.round(Number(value) || 0);
+  return n > 0 ? `+${n}` : String(n);
+}
+
+// One of: synced, paused, reloading, error, no-split, unsupported.
+function resolveState(status) {
+  if (!status) return 'no-split';
+  if (!status.isInValidSplitView) return status.reason === 'unsupported-page' ? 'unsupported' : 'no-split';
+  const group = status.group || {};
+  if (group.error) return 'error';
+  if (group.enabled && group.reloading) return 'reloading';
+  return group.enabled ? 'synced' : 'paused';
+}
+
+const STATE_COPY = {
+  synced: ['statusSyncedTitle', 'statusSyncedBody'],
+  paused: ['statusPausedTitle', 'statusPausedBody'],
+  reloading: ['statusReloadingTitle', 'statusReloadingBody'],
+  error: ['statusErrorTitle', 'statusErrorBody'],
+  'no-split': ['statusNoSplitTitle', 'statusNoSplitBody'],
+  unsupported: ['statusUnsupportedTitle', 'statusUnsupportedBody']
+};
+
 function renderStatus(status) {
+  if (!status) status = lastStatus;
+  lastStatus = status;
+
   const settings = status?.settings || {};
   alwaysShow.checked = settings.alwaysShowButtonOnSplitScreen !== false;
 
@@ -42,66 +98,95 @@ function renderStatus(status) {
     el.checked = typeof value === 'boolean' ? value : fallbackOn;
   }
 
+  const state = resolveState(status);
   const inSplit = Boolean(status?.isInValidSplitView);
-  const buttonShown = Boolean(status?.buttonShownForCurrent);
-  showCurrent.disabled = !inSplit;
-  if (addRuler) addRuler.disabled = !inSplit;
-  showCurrent.textContent = buttonShown
-    ? 'Hide button on current split screen'
-    : 'Show button on current split screen';
+  const group = status?.group || {};
+  root.dataset.state = state;
 
-  if (inSplit) {
-    statusText.textContent = buttonShown ? 'Button is shown for this split screen.' : 'Button is hidden for this split screen.';
-    hint.hidden = true;
-    hint.textContent = '';
-  } else {
-    statusText.textContent = 'No valid split screen detected.';
-    hint.hidden = false;
-    hint.textContent = status?.hint || 'Current tab is not in a split screen.';
+  const [titleKey, bodyKey] = STATE_COPY[state];
+  statusTitle.textContent = t(titleKey);
+  statusBody.textContent = t(bodyKey);
+
+  const offset = Number(group.offsetY || 0);
+  statusMeta.hidden = !(inSplit && offset !== 0);
+  statusMeta.textContent = statusMeta.hidden ? '' : t('metaOffset', [formatSigned(offset)]);
+
+  syncToggle.hidden = !inSplit;
+  const enabled = Boolean(group.enabled);
+  syncToggle.textContent = t(enabled ? 'btnStopSync' : 'btnStartSync');
+  syncToggle.classList.toggle('btn-primary', !enabled);
+  syncToggle.classList.toggle('btn-secondary', enabled);
+  syncToggle.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+
+  emptySteps.hidden = state !== 'no-split';
+  currentGroup.hidden = !inSplit;
+
+  for (const input of groupOptionInputs) {
+    input.checked = Boolean(group[input.dataset.groupOption]);
+  }
+
+  showCurrent.disabled = !inSplit;
+  addRuler.disabled = !inSplit;
+  showCurrent.textContent = t(status?.buttonShownForCurrent ? 'btnHidePanel' : 'btnShowPanel');
+}
+
+async function run(message) {
+  if (busy) {
+    // Undo the optimistic checkbox flip; the running request will re-render.
+    renderStatus(lastStatus);
+    return;
+  }
+  busy = true;
+  root.setAttribute('aria-busy', 'true');
+  try {
+    const status = await sendMessage(message);
+    if (status && status.ok !== false && status.settings) renderStatus(status);
+    else await refresh();
+  } finally {
+    busy = false;
+    root.removeAttribute('aria-busy');
   }
 }
 
-function renderFooter() {
-  const manifest = chrome.runtime.getManifest();
-  const version = manifest.version ? `v${manifest.version}` : '';
-  const author = manifest.author || 'Jan Willem Bijker';
-  footerMeta.textContent = [version, author].filter(Boolean).join(' · ');
-}
-
 async function refresh() {
-  const status = await sendMessage({ type: MSG.POPUP_GET_STATUS });
-  renderStatus(status);
+  renderStatus(await sendMessage({ type: MSG.POPUP_GET_STATUS }));
 }
 
-alwaysShow.addEventListener('change', async () => {
-  const status = await sendMessage({
-    type: MSG.POPUP_SET_ALWAYS_SHOW,
-    value: alwaysShow.checked
+syncToggle.addEventListener('click', () => {
+  const enabled = Boolean(lastStatus?.group?.enabled);
+  run({ type: MSG.POPUP_SET_SYNC, value: !enabled });
+});
+
+for (const input of groupOptionInputs) {
+  input.addEventListener('change', () => {
+    run({ type: MSG.POPUP_SET_GROUP_OPTION, option: input.dataset.groupOption, value: input.checked });
   });
-  renderStatus(status);
+}
+
+alwaysShow.addEventListener('change', () => {
+  run({ type: MSG.POPUP_SET_ALWAYS_SHOW, value: alwaysShow.checked });
 });
 
 for (const { el, key } of defaultToggles) {
   if (!el) continue;
-  el.addEventListener('change', async () => {
-    const status = await sendMessage({
-      type: MSG.POPUP_SET_DEFAULTS,
-      defaults: { [key]: el.checked }
-    });
-    renderStatus(status);
+  el.addEventListener('change', () => {
+    run({ type: MSG.POPUP_SET_DEFAULTS, defaults: { [key]: el.checked } });
   });
 }
 
-showCurrent.addEventListener('click', async () => {
-  const status = await sendMessage({ type: MSG.POPUP_SHOW_BUTTON_CURRENT });
-  renderStatus(status);
+showCurrent.addEventListener('click', () => {
+  run({ type: MSG.POPUP_SHOW_BUTTON_CURRENT });
 });
 
-if (addRuler) {
-  addRuler.addEventListener('click', async () => {
-    await sendMessage({ type: MSG.POPUP_RULER_ADD });
-  });
-}
+addRuler.addEventListener('click', async () => {
+  await sendMessage({ type: MSG.POPUP_RULER_ADD });
+  await refresh();
+});
 
-renderFooter();
+$('openShortcuts').addEventListener('click', () => {
+  chrome.tabs.create({ url: 'chrome://extensions/shortcuts' }).catch(() => undefined);
+});
+
+$('version').textContent = `v${chrome.runtime.getManifest().version}`;
+localize();
 refresh();

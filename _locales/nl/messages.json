@@ -1,0 +1,227 @@
+{
+  "extName": {
+    "message": "SplitScreen Browser Sync"
+  },
+  "extDescription": {
+    "message": "Synchroniseer scrollen, klikken en hover tussen de twee tabbladen van een Chrome Split View. Voor live en staging naast elkaar."
+  },
+  "cmdSyncCurrent": {
+    "message": "Sync starten voor de huidige Split View"
+  },
+  "cmdSyncAll": {
+    "message": "Sync starten voor alle Split Views in dit venster"
+  },
+  "cmdStopCurrent": {
+    "message": "Sync stoppen voor de huidige Split View"
+  },
+  "cmdHardReload": {
+    "message": "Actieve helft hard herladen"
+  },
+  "statusSyncedTitle": {
+    "message": "Gesynchroniseerd"
+  },
+  "statusSyncedBody": {
+    "message": "Beide helften scrollen samen."
+  },
+  "statusPausedTitle": {
+    "message": "Gepauzeerd"
+  },
+  "statusPausedBody": {
+    "message": "Split View gevonden. Start de sync om beide helften te koppelen."
+  },
+  "statusReloadingTitle": {
+    "message": "Herladen"
+  },
+  "statusReloadingBody": {
+    "message": "Een helft wordt herladen. De sync gaat daarna vanzelf verder."
+  },
+  "statusErrorTitle": {
+    "message": "Andere helft reageert niet"
+  },
+  "statusErrorBody": {
+    "message": "Herlaad de andere helft en start de sync opnieuw."
+  },
+  "statusNoSplitTitle": {
+    "message": "Geen Split View"
+  },
+  "statusNoSplitBody": {
+    "message": "Zet twee webpagina's naast elkaar om ze te vergelijken."
+  },
+  "emptyStep1": {
+    "message": "Klik met rechts op een tabblad en kies de optie voor een nieuwe gesplitste weergave."
+  },
+  "emptyStep2": {
+    "message": "Kies de tweede pagina. Beide moeten gewone websites zijn (http of https)."
+  },
+  "emptyStep3": {
+    "message": "Open dit menu opnieuw en klik op Sync starten."
+  },
+  "statusUnsupportedTitle": {
+    "message": "Deze pagina kan niet worden gesynchroniseerd"
+  },
+  "statusUnsupportedBody": {
+    "message": "Chrome-pagina's, de Web Store en lokale bestanden zijn afgeschermd voor extensies. Open een gewone website in een Split View."
+  },
+  "metaOffset": {
+    "message": "Scroll-offset $OFFSET$ px",
+    "placeholders": {
+      "offset": {
+        "content": "$1",
+        "example": "+20"
+      }
+    }
+  },
+  "btnStartSync": {
+    "message": "Sync starten"
+  },
+  "btnStopSync": {
+    "message": "Sync stoppen"
+  },
+  "btnSyncAll": {
+    "message": "Alle Split Views syncen"
+  },
+  "sectionThisSplit": {
+    "message": "Deze Split View"
+  },
+  "sectionThisSplitHelp": {
+    "message": "Wijzigingen gelden meteen voor beide helften."
+  },
+  "optNavigation": {
+    "message": "Navigatie synchroniseren"
+  },
+  "optNavigationHelp": {
+    "message": "Opent hetzelfde pad aan de andere kant, op het eigen domein."
+  },
+  "optClicks": {
+    "message": "Klikken spiegelen"
+  },
+  "optClicksHelp": {
+    "message": "Herhaalt klikken op het overeenkomende element. Nooit op wachtwoord- of betaalvelden."
+  },
+  "optHover": {
+    "message": "Hover-effecten spiegelen"
+  },
+  "optHoverHelp": {
+    "message": "Toont hover-stijlen en hover-menu's aan beide kanten."
+  },
+  "optWpAdminBar": {
+    "message": "WordPress-adminbalk verbergen"
+  },
+  "optWpAdminBarHelp": {
+    "message": "Verbergt de balk tijdens het syncen zodat beide lay-outs gelijk lopen."
+  },
+  "btnAddRuler": {
+    "message": "Liniaal"
+  },
+  "btnShowPanel": {
+    "message": "Paginaknop tonen"
+  },
+  "btnHidePanel": {
+    "message": "Paginaknop verbergen"
+  },
+  "sectionDefaults": {
+    "message": "Standaard voor nieuwe Split Views"
+  },
+  "sectionDefaultsHelp": {
+    "message": "Geldt voor elk nieuw paar. Bestaande paren houden hun eigen instellingen."
+  },
+  "sectionButton": {
+    "message": "Knop op de pagina"
+  },
+  "optAlwaysShow": {
+    "message": "Tonen in elke Split View"
+  },
+  "optAlwaysShowHelp": {
+    "message": "Zet uit om de zwevende knop alleen te tonen als je daarvoor kiest."
+  },
+  "footerShortcuts": {
+    "message": "Sneltoetsen"
+  },
+  "footerMadeBy": {
+    "message": "Gemaakt door"
+  },
+  "panelClose": {
+    "message": "Sluiten"
+  },
+  "bubbleLabel": {
+    "message": "Bediening van SplitScreen Browser Sync openen"
+  },
+  "pillSynced": {
+    "message": "Gesynct"
+  },
+  "pillPaused": {
+    "message": "Gepauzeerd"
+  },
+  "pillReloading": {
+    "message": "Herladen"
+  },
+  "pillError": {
+    "message": "Reageert niet"
+  },
+  "sectionOptions": {
+    "message": "Opties"
+  },
+  "sectionOffset": {
+    "message": "Scroll-offset"
+  },
+  "offsetHelp": {
+    "message": "De rechterhelft scrollt zoveel pixels verder dan de linker."
+  },
+  "offsetInputLabel": {
+    "message": "Scroll-offset in pixels"
+  },
+  "btnApply": {
+    "message": "Toepassen"
+  },
+  "btnReset": {
+    "message": "Herstellen"
+  },
+  "sectionReload": {
+    "message": "Herladen"
+  },
+  "colLeft": {
+    "message": "Links"
+  },
+  "colRight": {
+    "message": "Rechts"
+  },
+  "btnReload": {
+    "message": "Herladen"
+  },
+  "btnHardReload": {
+    "message": "Hard herladen"
+  },
+  "reloadLeftLabel": {
+    "message": "Linkerhelft herladen"
+  },
+  "reloadRightLabel": {
+    "message": "Rechterhelft herladen"
+  },
+  "hardReloadLeftLabel": {
+    "message": "Linkerhelft hard herladen, zonder cache"
+  },
+  "hardReloadRightLabel": {
+    "message": "Rechterhelft hard herladen, zonder cache"
+  },
+  "btnSwap": {
+    "message": "Kanten wisselen"
+  },
+  "btnRuler": {
+    "message": "Liniaal toevoegen"
+  },
+  "rulerThickness": {
+    "message": "Dikte"
+  },
+  "rulerDelete": {
+    "message": "Verwijderen"
+  },
+  "rulerLabel": {
+    "message": "Liniaal. Sleep om te verplaatsen, druk op Delete om te verwijderen."
+  },
+  "toastNoPair": {
+    "message": "Geen Split View-paar gevonden. Probeer het zo opnieuw."
+  },
+  "panelTitle": {
+    "message": "SplitScreen Sync"
+  }
+}

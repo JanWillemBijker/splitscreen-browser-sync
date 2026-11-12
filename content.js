@@ -66,6 +66,376 @@
   const REMOTE_HOVER_SUPPRESS_MS = 120;
   const MAX_FORCE_HOVER_RULES = 20000;
 
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+
+  // Styles for the floating control panel. Everything lives in a Shadow DOM so
+  // page CSS cannot leak in. System fonts only; no remote resources.
+  const PANEL_CSS = `
+    :host {
+      all: initial;
+      position: fixed;
+      bottom: 18px;
+      left: 18px;
+      z-index: 2147483647;
+      color-scheme: light dark;
+
+      --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      --surface: #ffffff;
+      --surface-2: #f3f6f4;
+      --ink: #15201b;
+      --muted: #4f5e57;
+      --line: #dde4e0;
+      --line-strong: #c4cfc9;
+      --accent: #3cde95;
+      --accent-hover: #2fcf86;
+      --on-accent: #072619;
+      --switch-off: #7c8983;
+      --switch-on: #12a26b;
+      --focus: #0a6e4c;
+      --ok-bg: #e5f7ee;
+      --ok-ink: #0a6e4c;
+      --warn-bg: #fdf1e4;
+      --warn-ink: #8a3b00;
+      --idle-bg: #edf1ef;
+      --idle-ink: #4f5e57;
+      --status-color: #7c8983;
+
+      font-family: var(--font);
+      color: var(--ink);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :host {
+        --surface: #18221f;
+        --surface-2: #1f2a27;
+        --ink: #e6eeea;
+        --muted: #a3b3ac;
+        --line: #2a3732;
+        --line-strong: #3a4943;
+        --switch-off: #6e7c76;
+        --switch-on: #3cde95;
+        --focus: #7ff0be;
+        --ok-bg: #15302a;
+        --ok-ink: #6eebb4;
+        --warn-bg: #33251a;
+        --warn-ink: #ffc58f;
+        --idle-bg: #1d2825;
+        --idle-ink: #a3b3ac;
+      }
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      font-family: var(--font);
+    }
+
+    :focus-visible {
+      outline: 2px solid var(--focus);
+      outline-offset: 2px;
+    }
+
+    .svss-wrap {
+      position: fixed;
+      bottom: 18px;
+      left: 18px;
+      width: 44px;
+      min-height: 44px;
+      pointer-events: none;
+    }
+
+    .svss-bubble {
+      appearance: none;
+      position: relative;
+      display: grid;
+      place-items: center;
+      width: 44px;
+      height: 44px;
+      padding: 0;
+      border: 0;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #3cde95 0%, #2ec4d6 100%);
+      box-shadow: 0 1px 2px rgba(7, 38, 25, 0.25), 0 6px 16px rgba(7, 38, 25, 0.18);
+      cursor: pointer;
+      pointer-events: auto;
+      transition: box-shadow 150ms ease;
+    }
+
+    .svss-bubble:hover,
+    .svss-bubble[aria-expanded="true"] {
+      box-shadow: 0 1px 2px rgba(7, 38, 25, 0.3), 0 10px 24px rgba(7, 38, 25, 0.26);
+    }
+
+    .svss-mark { width: 36px; height: 36px; display: block; }
+    .svss-mark-pane { fill: #ffffff; }
+    .svss-mark-link { fill: none; stroke: #0b5a3f; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+
+    .svss-status-dot {
+      position: absolute;
+      right: -3px;
+      top: -3px;
+      width: 12px;
+      height: 12px;
+      border: 2px solid #ffffff;
+      border-radius: 50%;
+      background: var(--status-color);
+    }
+
+    .svss-bridge {
+      position: absolute;
+      left: 0;
+      bottom: 44px;
+      width: 160px;
+      height: 14px;
+      display: none;
+      pointer-events: auto;
+    }
+
+    .svss-bridge.open { display: block; }
+
+    .svss-panel {
+      position: absolute;
+      bottom: 56px;
+      left: 0;
+      width: 304px;
+      max-width: calc(100vw - 36px);
+      max-height: calc(100vh - 92px);
+      overflow: auto;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface);
+      color: var(--ink);
+      font-size: 13px;
+      line-height: 1.45;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08), 0 18px 44px rgba(0, 0, 0, 0.18);
+      pointer-events: auto;
+      display: none;
+    }
+
+    .svss-panel.open { display: block; }
+
+    .svss-header {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .svss-title {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 650;
+      line-height: 1.3;
+    }
+
+    .svss-pill {
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: var(--idle-bg);
+      color: var(--idle-ink);
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .svss-panel[data-status="synced"] .svss-pill,
+    .svss-panel[data-status="reloading"] .svss-pill { background: var(--ok-bg); color: var(--ok-ink); }
+    .svss-panel[data-status="error"] .svss-pill { background: var(--warn-bg); color: var(--warn-ink); }
+
+    .svss-close {
+      appearance: none;
+      display: grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+    }
+
+    .svss-close:hover { background: var(--surface-2); color: var(--ink); }
+
+    .svss-close svg {
+      width: 14px;
+      height: 14px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+    }
+
+    .svss-sync {
+      display: grid;
+      gap: 4px;
+    }
+
+    .svss-section {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--line);
+    }
+
+    .svss-section-title {
+      margin: 0 0 4px;
+      font-size: 13px;
+      font-weight: 650;
+      line-height: 1.3;
+    }
+
+    .svss-help {
+      margin: 0 0 8px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .svss-btn {
+      appearance: none;
+      min-height: 32px;
+      padding: 6px 10px;
+      border: 1px solid var(--line-strong);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--ink);
+      cursor: pointer;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.2;
+      text-align: center;
+      transition: background-color 150ms ease, border-color 150ms ease;
+    }
+
+    .svss-btn:hover { border-color: var(--muted); }
+
+    .svss-btn-block { width: 100%; min-height: 36px; }
+
+    .svss-btn-primary {
+      border-color: transparent;
+      background: var(--accent);
+      color: var(--on-accent);
+    }
+
+    .svss-btn-primary:hover { background: var(--accent-hover); border-color: transparent; }
+
+    .svss-btn-quiet {
+      border-color: transparent;
+      background: transparent;
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    .svss-btn-quiet:hover { background: var(--surface-2); color: var(--ink); border-color: transparent; }
+
+    .svss-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 34px;
+      cursor: pointer;
+    }
+
+    .svss-switch {
+      appearance: none;
+      flex: none;
+      position: relative;
+      width: 34px;
+      height: 20px;
+      margin: 0;
+      border-radius: 999px;
+      background: var(--switch-off);
+      cursor: pointer;
+      transition: background-color 150ms ease;
+    }
+
+    .svss-switch::after {
+      content: "";
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #ffffff;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+      transition: transform 150ms ease;
+    }
+
+    .svss-switch:checked { background: var(--switch-on); }
+    .svss-switch:checked::after { transform: translateX(14px); }
+
+    .svss-offset-row {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 6px;
+    }
+
+    .svss-field {
+      position: relative;
+      display: block;
+    }
+
+    .svss-field input {
+      width: 100%;
+      height: 32px;
+      padding: 6px 30px 6px 10px;
+      border: 1px solid var(--line-strong);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--ink);
+      font: inherit;
+      font-size: 13px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .svss-field input:focus-visible { outline-offset: 0; }
+
+    .svss-input-suffix {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted);
+      font-size: 12px;
+      pointer-events: none;
+    }
+
+    .svss-reload-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .svss-reload-col {
+      display: grid;
+      gap: 6px;
+    }
+
+    .svss-reload-side {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .svss-footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 6px;
+      margin-top: 12px;
+      padding-top: 8px;
+      border-top: 1px solid var(--line);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { transition: none !important; }
+    }
+  `;
+
+
   let uiState = {
     show: false,
     enabled: false,
@@ -155,25 +525,23 @@
     }
   }
 
-  function getStatusColor(colorName) {
-    switch (colorName) {
-      case 'green': return '#3cde95';
-      case 'orange': return '#f59f00';
-      case 'red': return '#e03131';
-      case 'gray':
-      default: return '#8a8a8a';
+  function t(key, fallback = '') {
+    try {
+      return chrome.i18n.getMessage(key) || fallback;
+    } catch (_error) {
+      return fallback;
     }
   }
 
-  function getSyncStatusLabel() {
-    if (uiState.color === 'red') return 'Error';
-    return uiState.enabled ? 'Sync active' : 'Sync off';
-  }
-
-  function formatSignedPx(value) {
-    const number = Number(value || 0);
-    if (number > 0) return `+${number}px`;
-    return `${number}px`;
+  // Status dot colours on the bubble; chosen for 3:1 against the white ring.
+  function getStatusColor(colorName) {
+    switch (colorName) {
+      case 'green': return '#12a26b';
+      case 'orange': return '#c26a00';
+      case 'red': return '#c92a2a';
+      case 'gray':
+      default: return '#7c8983';
+    }
   }
 
   function cssEscape(value) {
@@ -187,20 +555,21 @@
 
   function showToast(text) {
     const toast = document.createElement('div');
+    toast.setAttribute('role', 'status');
     toast.style.cssText = [
-      'position:fixed', 'bottom:80px', 'left:50%',
+      'all:initial', 'position:fixed', 'bottom:80px', 'left:50%',
       'transform:translateX(-50%)',
       'z-index:2147483647',
-      'padding:8px 16px',
-      'border-radius:9px',
-      'background:rgba(20,23,28,0.92)',
-      'color:#f2f2f2',
-      'font:12px/1.4 "Roboto Flex",Arial,sans-serif',
-      'box-shadow:0 4px 18px rgba(0,0,0,0.35)',
+      'max-width:calc(100vw - 32px)',
+      'padding:10px 16px',
+      'border-radius:8px',
+      'background:#15201b',
+      'color:#e6eeea',
+      'font:500 13px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif',
+      'box-shadow:0 2px 6px rgba(0,0,0,0.12),0 12px 32px rgba(0,0,0,0.24)',
       'pointer-events:none',
-      'white-space:nowrap',
       'opacity:1',
-      'transition:opacity 350ms ease',
+      'transition:opacity 300ms ease',
     ].join(';');
     toast.textContent = text;
     (document.documentElement || document.body).appendChild(toast);
@@ -258,11 +627,13 @@
     bridge = null;
   }
 
-  function createButton(label, command, extraClass = '', payloadFactory = null) {
+  function createButton(label, command, extraClass = '', payloadFactory = null, options = {}) {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = `svss-btn ${extraClass}`.trim();
     button.textContent = label;
+    button.dataset.key = options.key || command;
+    if (options.ariaLabel) button.setAttribute('aria-label', options.ariaLabel);
     button.addEventListener('click', async (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -272,14 +643,21 @@
     return button;
   }
 
-  function createSection(titleText) {
+  function createSection(titleText, helpText = '') {
     const section = document.createElement('section');
     section.className = 'svss-section';
 
-    const title = document.createElement('div');
+    const title = document.createElement('h3');
     title.className = 'svss-section-title';
     title.textContent = titleText;
     section.appendChild(title);
+
+    if (helpText) {
+      const help = document.createElement('p');
+      help.className = 'svss-help';
+      help.textContent = helpText;
+      section.appendChild(help);
+    }
 
     return section;
   }
@@ -288,91 +666,97 @@
     const toggle = document.createElement('label');
     toggle.className = 'svss-toggle';
 
+    const text = document.createElement('span');
+    text.className = 'svss-toggle-text';
+    text.textContent = label;
+
     const input = document.createElement('input');
     input.type = 'checkbox';
+    input.className = 'svss-switch';
     input.checked = Boolean(checked);
+    input.dataset.key = command;
     input.addEventListener('change', async (event) => {
       event.stopPropagation();
       await sendRuntimeMessage({ type: MSG.COMMAND, command, value: input.checked });
     });
 
-    const switchEl = document.createElement('span');
-    switchEl.className = 'svss-switch';
-
-    const text = document.createElement('span');
-    text.className = 'svss-toggle-text';
-    text.textContent = label;
-
-    toggle.appendChild(input);
-    toggle.appendChild(switchEl);
     toggle.appendChild(text);
+    toggle.appendChild(input);
     return toggle;
   }
 
+  // Maps the background state to one of: synced, paused, reloading, error.
+  function getPanelStatus() {
+    if (uiState.color === 'red') return 'error';
+    if (uiState.enabled && uiState.reloading) return 'reloading';
+    return uiState.enabled ? 'synced' : 'paused';
+  }
+
+  const PILL_KEYS = { synced: 'pillSynced', paused: 'pillPaused', reloading: 'pillReloading', error: 'pillError' };
+
   function renderPanelContents() {
     if (!panel) return;
+
+    // Re-rendering replaces every control; keep keyboard focus where it was.
+    const focusedKey = shadow?.activeElement?.dataset?.key || null;
     panel.textContent = '';
+
+    const status = getPanelStatus();
+    panel.dataset.status = status;
 
     const header = document.createElement('div');
     header.className = 'svss-header';
 
-    const title = document.createElement('div');
+    const title = document.createElement('h2');
     title.className = 'svss-title';
-    title.textContent = 'SplitScreen Browser Sync';
+    title.id = 'svss-title';
+    title.textContent = t('panelTitle', 'SplitScreen Sync');
+
+    const pill = document.createElement('span');
+    pill.className = 'svss-pill';
+    pill.setAttribute('role', 'status');
+    pill.textContent = t(PILL_KEYS[status], status);
 
     const close = document.createElement('button');
     close.type = 'button';
     close.className = 'svss-close';
-    close.textContent = '×';
-    close.setAttribute('aria-label', 'Close popup');
+    close.dataset.key = 'close';
+    close.setAttribute('aria-label', t('panelClose', 'Close'));
+    close.appendChild(createIcon('M4 4l8 8M12 4l-8 8'));
     close.addEventListener('click', (event) => {
       event.preventDefault();
       event.stopPropagation();
-      panelOpen = false;
-      updatePanelOpenState();
+      closePanelAndFocusBubble();
     });
 
     header.appendChild(title);
+    header.appendChild(pill);
     header.appendChild(close);
     panel.appendChild(header);
 
-    const syncSection = createSection('Sync');
-    const syncGrid = document.createElement('div');
-    syncGrid.className = 'svss-grid svss-sync-grid';
+    const syncRow = document.createElement('div');
+    syncRow.className = 'svss-sync';
+    const syncButton = uiState.enabled
+      ? createButton(t('btnStopSync', 'Stop sync'), CMD.STOP_CURRENT, 'svss-btn-block', null, { key: 'sync-toggle' })
+      : createButton(t('btnStartSync', 'Start sync'), CMD.SYNC_CURRENT, 'svss-btn-primary svss-btn-block', null, { key: 'sync-toggle' });
+    syncButton.setAttribute('aria-pressed', uiState.enabled ? 'true' : 'false');
+    syncRow.appendChild(syncButton);
+    syncRow.appendChild(createButton(t('btnSyncAll', 'Sync all Split Views'), CMD.SYNC_ALL, 'svss-btn-quiet'));
+    panel.appendChild(syncRow);
 
-    const startSync = createButton('Start sync', CMD.SYNC_CURRENT, 'outline-green');
-    startSync.classList.toggle('is-active', Boolean(uiState.enabled));
-    syncGrid.appendChild(startSync);
-    syncGrid.appendChild(createButton('Stop sync', CMD.STOP_CURRENT));
-    syncGrid.appendChild(createButton('Sync all', CMD.SYNC_ALL));
-    syncSection.appendChild(syncGrid);
-    panel.appendChild(syncSection);
+    const optionsSection = createSection(t('sectionOptions', 'Options'));
+    optionsSection.appendChild(createToggle(t('optNavigation', 'Sync navigation'), uiState.syncNavigation, CMD.SET_NAVIGATION_SYNC));
+    optionsSection.appendChild(createToggle(t('optClicks', 'Mirror clicks'), uiState.mirrorClicks, CMD.SET_CLICK_MIRRORING));
+    optionsSection.appendChild(createToggle(t('optHover', 'Mirror hover effects'), uiState.mirrorHover, CMD.SET_HOVER_MIRRORING));
+    optionsSection.appendChild(createToggle(t('optWpAdminBar', 'Hide WordPress admin bar'), uiState.hideWpAdminBar, CMD.SET_WP_ADMIN_BAR));
+    panel.appendChild(optionsSection);
 
-    const reloadSection = createSection('Reload');
-    const reloadGrid = document.createElement('div');
-    reloadGrid.className = 'svss-reload-grid';
-    reloadGrid.appendChild(createButton('Reload left', CMD.RELOAD_LEFT));
-    reloadGrid.appendChild(createButton('Reload right', CMD.RELOAD_RIGHT));
-    reloadGrid.appendChild(createButton('Hard reload left', CMD.HARD_RELOAD_LEFT));
-    reloadGrid.appendChild(createButton('Hard reload right', CMD.HARD_RELOAD_RIGHT));
-    reloadSection.appendChild(reloadGrid);
-    panel.appendChild(reloadSection);
-
-    const offsetSection = createSection('Offset');
-
-    const offsetTitleEl = offsetSection.querySelector('.svss-section-title');
-    if (offsetTitleEl) {
-      offsetTitleEl.style.display = 'flex';
-      offsetTitleEl.style.justifyContent = 'space-between';
-      offsetTitleEl.style.alignItems = 'baseline';
-      const currentLabel = document.createElement('span');
-      currentLabel.textContent = `Current: ${formatSignedPx(uiState.offsetY)}`;
-      currentLabel.style.cssText = 'font-size:9px;font-weight:400;color:#888;text-transform:none;letter-spacing:0;';
-      offsetTitleEl.appendChild(currentLabel);
-    }
+    const offsetSection = createSection(t('sectionOffset', 'Scroll offset'), t('offsetHelp', ''));
+    const offsetRow = document.createElement('div');
+    offsetRow.className = 'svss-offset-row';
 
     const fieldWrap = document.createElement('label');
-    fieldWrap.className = 'svss-field svss-offset-field';
+    fieldWrap.className = 'svss-field';
 
     const yInput = document.createElement('input');
     yInput.type = 'number';
@@ -380,53 +764,114 @@
     yInput.placeholder = '0';
     yInput.value = String(Number(uiState.offsetY || 0));
     yInput.inputMode = 'numeric';
-    yInput.setAttribute('aria-label', 'Offset Y in pixels');
+    yInput.dataset.key = 'offset-input';
+    yInput.setAttribute('aria-label', t('offsetInputLabel', 'Scroll offset in pixels'));
+    yInput.addEventListener('keydown', (event) => {
+      event.stopPropagation();
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        sendRuntimeMessage({ type: MSG.COMMAND, command: CMD.SET_OFFSET, offsetY: parseInt(yInput.value || '0', 10) || 0 });
+      }
+    });
 
     const suffix = document.createElement('span');
     suffix.className = 'svss-input-suffix';
+    suffix.setAttribute('aria-hidden', 'true');
     suffix.textContent = 'px';
 
     fieldWrap.appendChild(yInput);
     fieldWrap.appendChild(suffix);
-    offsetSection.appendChild(fieldWrap);
-
-    const offsetActions = document.createElement('div');
-    offsetActions.className = 'svss-offset-actions';
-    offsetActions.appendChild(createButton('Apply', CMD.SET_OFFSET, 'outline-green', () => ({
+    offsetRow.appendChild(fieldWrap);
+    offsetRow.appendChild(createButton(t('btnApply', 'Apply'), CMD.SET_OFFSET, '', () => ({
       offsetY: parseInt(yInput.value || '0', 10) || 0
     })));
-    offsetActions.appendChild(createButton('Reset', CMD.OFFSET_RESET));
-    offsetSection.appendChild(offsetActions);
+    offsetRow.appendChild(createButton(t('btnReset', 'Reset'), CMD.OFFSET_RESET, 'svss-btn-quiet'));
+    offsetSection.appendChild(offsetRow);
     panel.appendChild(offsetSection);
 
-    const optionsSection = createSection('Options');
-    optionsSection.appendChild(createToggle('Hide WordPress admin bar', uiState.hideWpAdminBar, CMD.SET_WP_ADMIN_BAR));
-    optionsSection.appendChild(createToggle('Sync navigation', uiState.syncNavigation, CMD.SET_NAVIGATION_SYNC));
-    optionsSection.appendChild(createToggle('Mirror clicks', uiState.mirrorClicks, CMD.SET_CLICK_MIRRORING));
-    optionsSection.appendChild(createToggle('Mirror hover effects', uiState.mirrorHover, CMD.SET_HOVER_MIRRORING));
+    const reloadSection = createSection(t('sectionReload', 'Reload'));
+    const reloadGrid = document.createElement('div');
+    reloadGrid.className = 'svss-reload-grid';
+    for (const side of ['left', 'right']) {
+      const column = document.createElement('div');
+      column.className = 'svss-reload-col';
+      column.setAttribute('role', 'group');
+      const heading = document.createElement('span');
+      heading.className = 'svss-reload-side';
+      heading.textContent = t(side === 'left' ? 'colLeft' : 'colRight', side);
+      column.appendChild(heading);
+      const isLeft = side === 'left';
+      column.appendChild(createButton(t('btnReload', 'Reload'), isLeft ? CMD.RELOAD_LEFT : CMD.RELOAD_RIGHT, '', null, {
+        ariaLabel: t(isLeft ? 'reloadLeftLabel' : 'reloadRightLabel', '')
+      }));
+      column.appendChild(createButton(t('btnHardReload', 'Hard reload'), isLeft ? CMD.HARD_RELOAD_LEFT : CMD.HARD_RELOAD_RIGHT, '', null, {
+        ariaLabel: t(isLeft ? 'hardReloadLeftLabel' : 'hardReloadRightLabel', '')
+      }));
+      reloadGrid.appendChild(column);
+    }
+    reloadSection.appendChild(reloadGrid);
+    panel.appendChild(reloadSection);
 
-    const swap = document.createElement('div');
-    swap.className = 'svss-secondary-row';
-    swap.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:6px;';
-
-    const swapBtn = createButton('Swap left/right', CMD.SWAP_SIDES, 'secondary');
-    swapBtn.style.cssText = 'margin-top:0;width:100%;';
-    swap.appendChild(swapBtn);
+    const footer = document.createElement('div');
+    footer.className = 'svss-footer';
+    footer.appendChild(createButton(t('btnSwap', 'Swap sides'), CMD.SWAP_SIDES, 'svss-btn-quiet'));
 
     const addRulerPanelBtn = document.createElement('button');
     addRulerPanelBtn.type = 'button';
-    addRulerPanelBtn.className = 'svss-btn secondary';
-    addRulerPanelBtn.style.cssText = 'margin-top:0;white-space:nowrap;';
-    addRulerPanelBtn.textContent = '+ Ruler';
+    addRulerPanelBtn.className = 'svss-btn svss-btn-quiet';
+    addRulerPanelBtn.dataset.key = 'add-ruler';
+    addRulerPanelBtn.textContent = t('btnRuler', 'Add ruler');
     addRulerPanelBtn.addEventListener('click', async (event) => {
       event.preventDefault();
       event.stopPropagation();
       await sendRuntimeMessage({ type: MSG.POPUP_RULER_ADD });
     });
-    swap.appendChild(addRulerPanelBtn);
+    footer.appendChild(addRulerPanelBtn);
+    panel.appendChild(footer);
 
-    optionsSection.appendChild(swap);
-    panel.appendChild(optionsSection);
+    if (focusedKey) {
+      const target = Array.from(panel.querySelectorAll('[data-key]')).find((el) => el.dataset.key === focusedKey);
+      if (target) target.focus({ preventScroll: true });
+    }
+  }
+
+  function createIcon(pathData, viewBox = '0 0 16 16') {
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('viewBox', viewBox);
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('focusable', 'false');
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', pathData);
+    svg.appendChild(path);
+    return svg;
+  }
+
+  // The bubble mirrors the toolbar icon (two panes joined by a link), built
+  // with DOM APIs so no extension resource has to be web accessible.
+  function createBrandMark() {
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 40 40');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('focusable', 'false');
+    svg.setAttribute('class', 'svss-mark');
+    const shapes = [
+      ['rect', { x: 7.5, y: 9, width: 11, height: 22, rx: 2.5, class: 'svss-mark-pane' }],
+      ['rect', { x: 21.5, y: 9, width: 11, height: 22, rx: 2.5, class: 'svss-mark-pane' }],
+      ['path', { d: 'M11.5 20h17M15 16.5 11.5 20l3.5 3.5M25 16.5l3.5 3.5-3.5 3.5', class: 'svss-mark-link' }]
+    ];
+    for (const [tag, attrs] of shapes) {
+      const el = document.createElementNS(SVG_NS, tag);
+      for (const [name, value] of Object.entries(attrs)) el.setAttribute(name, String(value));
+      svg.appendChild(el);
+    }
+    return svg;
+  }
+
+  function closePanelAndFocusBubble() {
+    panelOpen = false;
+    isPointerOverPanel = false;
+    updatePanelOpenState();
+    if (bubble) bubble.focus({ preventScroll: true });
   }
 
   function ensureUi() {
@@ -436,7 +881,6 @@
     if (!host) {
       host = document.createElement('div');
       host.id = HOST_ID;
-      host.setAttribute('aria-hidden', 'false');
       (document.documentElement || document.body).appendChild(host);
     }
 
@@ -444,448 +888,7 @@
     shadow.textContent = '';
 
     const style = document.createElement('style');
-    style.textContent = `
-      :host {
-        all: initial;
-        position: fixed;
-        bottom: 18px;
-        left: 18px;
-        z-index: 2147483647;
-        font-family: "Roboto Flex", Roboto, Arial, sans-serif;
-        color: #161616;
-      }
-
-      *, *::before, *::after {
-        box-sizing: border-box;
-        font-family: "Roboto Flex", Roboto, Arial, sans-serif;
-      }
-
-      .svss-wrap {
-        position: fixed;
-        bottom: 18px;
-        left: 18px;
-        z-index: 2147483647;
-        width: 42px;
-        min-height: 42px;
-        pointer-events: none;
-      }
-
-      .svss-bubble {
-        appearance: none;
-        position: relative;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 44px;
-        height: 44px;
-        padding: 0;
-        border: none;
-        border-radius: 12px;
-        overflow: hidden;
-        background: linear-gradient(135deg, #3cde95 0%, #3cbede 100%);
-        color: #fff;
-        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
-        cursor: pointer;
-        pointer-events: auto;
-        transition: transform 120ms ease, box-shadow 120ms ease;
-      }
-
-      .svss-bubble:hover,
-      .svss-bubble:focus-visible,
-      .svss-bubble[aria-expanded="true"] {
-        transform: translateY(-1px) scale(1.04);
-        outline: none;
-        box-shadow: 0 10px 26px rgba(0, 0, 0, 0.30);
-      }
-
-      .svss-bubble:focus-visible {
-        box-shadow: 0 10px 26px rgba(0, 0, 0, 0.30), 0 0 0 2px rgba(60, 222, 149, 0.9);
-      }
-
-      .svss-icon {
-        width: 100%;
-        height: 100%;
-        display: grid;
-        place-items: center;
-        font-size: 22px;
-        line-height: 1;
-        color: #fff;
-      }
-
-      .svss-icon img {
-        width: 100%;
-        height: 100%;
-        display: block;
-        object-fit: cover;
-      }
-
-      .svss-status-dot {
-        position: absolute;
-        right: 3px;
-        bottom: 3px;
-        width: 12px;
-        height: 12px;
-        border: 2px solid rgba(255, 255, 255, 0.95);
-        border-radius: 999px;
-        background: var(--svss-status-color, #8a8a8a);
-        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18);
-      }
-
-      .svss-bridge {
-        position: absolute;
-        left: 0;
-        bottom: 44px;
-        width: 160px;
-        height: 16px;
-        display: none;
-        pointer-events: auto;
-      }
-
-      .svss-bridge.open { display: block; }
-
-      .svss-panel {
-        position: absolute;
-        bottom: 56px;
-        left: 0;
-        width: 300px;
-        max-width: calc(100vw - 36px);
-        max-height: calc(100vh - 92px);
-        overflow: auto;
-        padding: 12px;
-        border: 1px solid rgba(0, 0, 0, 0.10);
-        border-radius: 14px;
-        background: rgba(250, 250, 250, 0.98);
-        color: #161616;
-        box-shadow: 0 18px 50px rgba(0, 0, 0, 0.22);
-        pointer-events: auto;
-        display: none;
-        backdrop-filter: blur(12px) saturate(145%);
-        -webkit-backdrop-filter: blur(12px) saturate(145%);
-      }
-
-      .svss-panel.open { display: block; }
-
-      .svss-header {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 10px;
-        margin-bottom: 9px;
-      }
-
-      .svss-title {
-        margin: 0;
-        font-size: 13px;
-        line-height: 1.25;
-        font-weight: 760;
-      }
-
-      .svss-subtitle {
-        margin-top: 2px;
-        font-size: 11px;
-        line-height: 1.3;
-        color: #686868;
-      }
-
-      .svss-close {
-        appearance: none;
-        width: 24px;
-        height: 24px;
-        border: 1px solid rgba(0, 0, 0, 0.10);
-        border-radius: 999px;
-        background: rgba(0, 0, 0, 0.035);
-        color: #333;
-        cursor: pointer;
-        font: inherit;
-        font-size: 18px;
-        line-height: 20px;
-        padding: 0 0 2px;
-      }
-
-      .svss-close:hover,
-      .svss-close:focus-visible {
-        background: rgba(0, 0, 0, 0.08);
-        outline: none;
-      }
-
-      .svss-summary {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 5px;
-        margin-bottom: 10px;
-      }
-
-      .svss-summary span {
-        min-width: 0;
-        padding: 6px 7px;
-        border: 1px solid rgba(0, 0, 0, 0.07);
-        border-radius: 9px;
-        background: rgba(0, 0, 0, 0.025);
-        color: #343434;
-        font-size: 10.5px;
-        line-height: 1.2;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-
-      .svss-section {
-        padding-top: 9px;
-        margin-top: 9px;
-        border-top: 1px solid rgba(0, 0, 0, 0.08);
-      }
-
-      .svss-section-title {
-        display: block;
-        margin-bottom: 6px;
-        color: #666;
-        font-size: 10px;
-        line-height: 1.2;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.045em;
-      }
-
-      .svss-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr 1fr;
-        gap: 6px;
-      }
-
-      .svss-reload-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 6px;
-      }
-
-      .svss-btn {
-        appearance: none;
-        min-height: 30px;
-        padding: 7px 8px;
-        border: 1px solid rgba(0, 0, 0, 0.10);
-        border-radius: 9px;
-        background: #f4f4f4;
-        color: #171717;
-        cursor: pointer;
-        font: inherit;
-        font-size: 11px;
-        line-height: 1.18;
-        text-align: center;
-        transition: background 120ms ease, border-color 120ms ease, transform 80ms ease;
-      }
-
-      .svss-btn:hover,
-      .svss-btn:focus-visible {
-        background: #ececec;
-        border-color: rgba(0, 0, 0, 0.18);
-        outline: none;
-      }
-
-      .svss-btn:active { transform: translateY(1px); }
-
-      .svss-btn.outline-green {
-        border-color: rgba(60, 222, 149, 0.72);
-        background: transparent;
-        color: #0e7a4e;
-      }
-
-      .svss-btn.outline-green:hover,
-      .svss-btn.outline-green:focus-visible {
-        background: rgba(60, 222, 149, 0.10);
-        border-color: rgba(60, 222, 149, 0.88);
-      }
-
-      .svss-btn.outline-green.is-active {
-        border-color: rgba(60, 222, 149, 0.88);
-        background: #3cde95;
-        color: #063b27;
-        font-weight: 600;
-      }
-
-      .svss-btn.outline-green.is-active:hover,
-      .svss-btn.outline-green.is-active:focus-visible {
-        background: #2bbd80;
-      }
-
-      .svss-btn.secondary {
-        width: 100%;
-        margin-top: 2px;
-        background: rgba(0, 0, 0, 0.025);
-      }
-
-      .svss-offset-row {
-        display: grid;
-        grid-template-columns: 1fr auto;
-        align-items: end;
-        gap: 8px;
-      }
-
-      .svss-current-offset {
-        padding-bottom: 8px;
-        color: #777;
-        font-size: 11px;
-        white-space: nowrap;
-      }
-
-      .svss-field {
-        position: relative;
-        display: block;
-      }
-
-      .svss-field input {
-        width: 100%;
-        height: 32px;
-        padding: 6px 30px 6px 8px;
-        border: 1px solid rgba(0, 0, 0, 0.12);
-        border-radius: 9px;
-        background: #fff;
-        color: #161616;
-        font: inherit;
-        font-size: 12px;
-        line-height: 1;
-      }
-
-      .svss-field input:focus {
-        border-color: rgba(60, 222, 149, 0.55);
-        outline: 2px solid rgba(60, 222, 149, 0.13);
-      }
-
-      .svss-input-suffix {
-        position: absolute;
-        right: 9px;
-        top: 50%;
-        transform: translateY(-50%);
-        color: #777;
-        font-size: 11px;
-        line-height: 1;
-        pointer-events: none;
-      }
-
-      .svss-offset-actions {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 6px;
-        margin-top: 7px;
-      }
-
-      .svss-toggle {
-        display: grid;
-        grid-template-columns: auto auto 1fr;
-        align-items: center;
-        gap: 7px;
-        min-height: 26px;
-        color: #262626;
-        cursor: pointer;
-        font-size: 11px;
-        line-height: 1.35;
-      }
-
-      .svss-toggle + .svss-toggle { margin-top: 6px; }
-
-      .svss-toggle input {
-        position: absolute;
-        opacity: 0;
-        pointer-events: none;
-      }
-
-      .svss-switch {
-        position: relative;
-        width: 30px;
-        height: 17px;
-        border: 1px solid rgba(0, 0, 0, 0.15);
-        border-radius: 999px;
-        background: rgba(0, 0, 0, 0.12);
-        transition: background 120ms ease, border-color 120ms ease;
-      }
-
-      .svss-switch::after {
-        content: '';
-        position: absolute;
-        top: 2px;
-        left: 2px;
-        width: 11px;
-        height: 11px;
-        border-radius: 999px;
-        background: #fff;
-        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.20);
-        transition: transform 120ms ease;
-      }
-
-      .svss-toggle input:checked + .svss-switch {
-        border-color: rgba(60, 222, 149, 0.34);
-        background: rgba(60, 222, 149, 0.58);
-      }
-
-      .svss-toggle input:checked + .svss-switch::after { transform: translateX(13px); }
-
-      .svss-secondary-row { margin-top: 8px; }
-
-      @media (prefers-color-scheme: dark) {
-        .svss-panel {
-          border-color: rgba(255, 255, 255, 0.14);
-          background: rgba(25, 28, 34, 0.98);
-          color: #f2f2f2;
-          box-shadow: 0 18px 50px rgba(0, 0, 0, 0.42);
-        }
-
-        .svss-subtitle,
-        .svss-section-title,
-        .svss-input-suffix,
-        .svss-current-offset { color: #aaa; }
-
-        .svss-summary span {
-          border-color: rgba(255, 255, 255, 0.08);
-          background: rgba(255, 255, 255, 0.045);
-          color: #ededed;
-        }
-
-        .svss-section { border-top-color: rgba(255, 255, 255, 0.10); }
-
-        .svss-btn,
-        .svss-close,
-        .svss-field input {
-          border-color: rgba(255, 255, 255, 0.11);
-          background: rgba(255, 255, 255, 0.075);
-          color: #f2f2f2;
-        }
-
-        .svss-btn:hover,
-        .svss-btn:focus-visible,
-        .svss-close:hover,
-        .svss-close:focus-visible { background: rgba(255, 255, 255, 0.12); }
-
-        .svss-field input:focus {
-          border-color: rgba(60, 222, 149, 0.62);
-          outline-color: rgba(60, 222, 149, 0.18);
-        }
-
-        .svss-btn.outline-green {
-          border-color: rgba(60, 222, 149, 0.78);
-          background: transparent;
-          color: #5fe3a6;
-        }
-
-        .svss-btn.outline-green:hover,
-        .svss-btn.outline-green:focus-visible {
-          background: rgba(60, 222, 149, 0.12);
-          border-color: rgba(60, 222, 149, 0.92);
-        }
-
-        .svss-btn.outline-green.is-active {
-          border-color: rgba(60, 222, 149, 0.92);
-          background: #3cde95;
-          color: #063b27;
-          font-weight: 600;
-        }
-
-        .svss-btn.outline-green.is-active:hover,
-        .svss-btn.outline-green.is-active:focus-visible {
-          background: #2bbd80;
-        }
-        .svss-toggle { color: #f2f2f2; }
-        .svss-switch { border-color: rgba(255, 255, 255, 0.18); background: rgba(255, 255, 255, 0.12); }
-      }
-    `;
+    style.textContent = PANEL_CSS;
 
     wrap = document.createElement('div');
     wrap.className = 'svss-wrap';
@@ -893,30 +896,14 @@
     bubble = document.createElement('button');
     bubble.type = 'button';
     bubble.className = 'svss-bubble';
-    bubble.title = 'SplitScreen Browser Sync';
-    bubble.setAttribute('aria-label', 'Open SplitScreen Browser Sync controls');
+    bubble.setAttribute('aria-label', t('bubbleLabel', 'Open SplitScreen Browser Sync controls'));
     bubble.setAttribute('aria-haspopup', 'dialog');
     bubble.setAttribute('aria-expanded', 'false');
-
-    const icon = document.createElement('span');
-    icon.className = 'svss-icon';
-
-    try {
-      const image = document.createElement('img');
-      image.src = chrome.runtime.getURL('icons/icon.svg');
-      image.alt = '';
-      image.addEventListener('error', () => {
-        icon.textContent = '↕';
-      }, { once: true });
-      icon.appendChild(image);
-    } catch (_error) {
-      icon.textContent = '↕';
-    }
+    bubble.setAttribute('aria-controls', 'svss-panel');
+    bubble.appendChild(createBrandMark());
 
     const dot = document.createElement('span');
     dot.className = 'svss-status-dot';
-
-    bubble.appendChild(icon);
     bubble.appendChild(dot);
 
     bridge = document.createElement('div');
@@ -924,8 +911,9 @@
 
     panel = document.createElement('div');
     panel.className = 'svss-panel';
+    panel.id = 'svss-panel';
     panel.setAttribute('role', 'dialog');
-    panel.setAttribute('aria-label', 'SplitScreen Browser Sync controls');
+    panel.setAttribute('aria-labelledby', 'svss-title');
 
     bubble.addEventListener('click', (event) => {
       event.preventDefault();
@@ -933,6 +921,19 @@
       clearCloseTimer();
       panelOpen = !panelOpen;
       updatePanelOpenState();
+      // Opened from the keyboard: move focus into the panel.
+      if (panelOpen && event.detail === 0) {
+        const first = panel.querySelector('button, input');
+        if (first) first.focus({ preventScroll: true });
+      }
+    });
+
+    wrap.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && panelOpen) {
+        event.preventDefault();
+        event.stopPropagation();
+        closePanelAndFocusBubble();
+      }
     });
 
     bubble.addEventListener('pointerenter', () => {
@@ -945,25 +946,16 @@
       schedulePanelClose();
     });
 
-    panel.addEventListener('pointerenter', () => {
-      isPointerOverPanel = true;
-      openPanel();
-    });
-
-    panel.addEventListener('pointerleave', () => {
-      isPointerOverPanel = false;
-      schedulePanelClose();
-    });
-
-    bridge.addEventListener('pointerenter', () => {
-      isPointerOverPanel = true;
-      openPanel();
-    });
-
-    bridge.addEventListener('pointerleave', () => {
-      isPointerOverPanel = false;
-      schedulePanelClose();
-    });
+    for (const area of [panel, bridge]) {
+      area.addEventListener('pointerenter', () => {
+        isPointerOverPanel = true;
+        openPanel();
+      });
+      area.addEventListener('pointerleave', () => {
+        isPointerOverPanel = false;
+        schedulePanelClose();
+      });
+    }
 
     wrap.appendChild(bubble);
     wrap.appendChild(bridge);
@@ -983,8 +975,8 @@
 
     ensureUi();
     host.style.display = 'block';
-    host.style.setProperty('--svss-status-color', getStatusColor(uiState.color));
-    bubble.title = uiState.statusText || 'SplitScreen Browser Sync';
+    host.style.setProperty('--status-color', getStatusColor(uiState.color));
+    bubble.title = `${t('extName', 'SplitScreen Browser Sync')}: ${t(PILL_KEYS[getPanelStatus()], '')}`;
     renderPanelContents();
     updatePanelOpenState();
     setWpAdminBarHidden(Boolean(uiState.wpAdminBarHidden));
@@ -1331,14 +1323,18 @@
       }
     }
 
-    const text = normalizeText(element.innerText || element.textContent || element.value || ariaLabel || '');
+    // Never read a field's value: only visible text and labels are used.
+    const isField = isFormInput(element);
+    const text = isField
+      ? normalizeText(ariaLabel || element.getAttribute('placeholder') || '')
+      : normalizeText(element.innerText || element.textContent || ariaLabel || '');
 
     const cssPath = createCssPath(element);
     if (cssPath) candidates.push({ type: 'css', value: cssPath, strong: false });
 
     if (text && text.length <= 80) candidates.push({ type: 'text', tag, value: text, strong: false });
 
-    const textFingerprint = normalizeText(element.textContent || '').slice(0, 60);
+    const textFingerprint = isField ? '' : normalizeText(element.textContent || '').slice(0, 60);
 
     return { tag, candidates: candidates.slice(0, 10), text, textFingerprint };
   }
@@ -1399,7 +1395,7 @@
     const selector = tag || 'a,button,[role="button"],input[type="button"],input[type="submit"],summary,label';
     try {
       return Array.from(document.querySelectorAll(selector)).find((element) => {
-        const text = normalizeText(element.innerText || element.textContent || element.value || (element.getAttribute && element.getAttribute('aria-label')) || '');
+        const text = normalizeText(isFormInput(element) ? (element.getAttribute('aria-label') || element.getAttribute('placeholder') || '') : (element.innerText || element.textContent || (element.getAttribute && element.getAttribute('aria-label')) || ''));
         return text === value && isElementVisible(element);
       }) || null;
     } catch (_error) {
@@ -1448,7 +1444,7 @@
       const selector = candidate.tag || 'a,button,[role="button"],input[type="button"],input[type="submit"],summary,label';
       try {
         return Array.from(document.querySelectorAll(selector)).filter((element) => {
-          const text = normalizeText(element.innerText || element.textContent || element.value || (element.getAttribute && element.getAttribute('aria-label')) || '');
+          const text = normalizeText(isFormInput(element) ? (element.getAttribute('aria-label') || element.getAttribute('placeholder') || '') : (element.innerText || element.textContent || (element.getAttribute && element.getAttribute('aria-label')) || ''));
           return text === candidate.value && isElementVisible(element);
         });
       } catch (_error) {
@@ -1568,7 +1564,7 @@
     if (!uiState.mirrorClicks) return;
 
     const pointElement = resolveClickTarget(payload);
-    if (!pointElement) return;
+    if (!pointElement || isSensitiveField(pointElement)) return;
 
     const activatable = getInteractiveElement(pointElement);
     const rect = pointElement.getBoundingClientRect();
@@ -1633,6 +1629,7 @@
     if (isApplyingRemoteClick || performance.now() < remoteClickSuppressUntil) return;
     if (isInsideExtensionUi(event)) return;
     if (isInsideRulerUi(event)) return;
+    if (isSensitiveField(event.target)) return;
 
     const point = getEventCoordinates(event);
     const target = event.target instanceof Element ? event.target : null;
@@ -1643,6 +1640,35 @@
       click: { ...descriptor, ...point },
       timestamp: Date.now()
     });
+  }
+
+  // Fields whose content must never leave the page or be mirrored: passwords,
+  // one-time codes and payment card data. Their value is never read, and
+  // clicks/focus on them are not mirrored.
+  const SENSITIVE_AUTOCOMPLETE = /(^|\s)(current-password|new-password|one-time-code|cc-[a-z-]+)(\s|$)/i;
+  const SENSITIVE_NAME = /(pass(word|wd)?|pwd|secret|token|otp|cvc|cvv|card.?num|cc.?(num|exp|csc)|iban|security.?code)/i;
+
+  function isSensitiveField(element) {
+    if (!(element instanceof Element)) return false;
+    const field = element.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"]');
+    if (!field) return false;
+    const type = (field.getAttribute('type') || '').toLowerCase();
+    if (type === 'password') return true;
+    if (SENSITIVE_AUTOCOMPLETE.test(field.getAttribute('autocomplete') || '')) return true;
+    const hints = `${field.getAttribute('name') || ''} ${field.id || ''}`;
+    return SENSITIVE_NAME.test(hints);
+  }
+
+  function sanitizeRulers(list) {
+    if (!Array.isArray(list)) return [];
+    return list
+      .filter((r) => r && typeof r.id === 'string' && /^r-[a-z0-9-]{1,32}$/.test(r.id))
+      .slice(0, 20)
+      .map((r) => ({
+        id: r.id,
+        y: Math.max(0, Math.min(100000, Math.round(Number(r.y) || 0))),
+        thickness: Math.max(1, Math.min(20, Math.round(Number(r.thickness) || 2)))
+      }));
   }
 
   function isFormInput(element) {
@@ -1659,7 +1685,7 @@
     if (isApplyingRemoteClick || performance.now() < remoteClickSuppressUntil) return;
     if (isInsideExtensionUi(event)) return;
     const target = event.target instanceof Element ? event.target : null;
-    if (!target || !isFormInput(target)) return;
+    if (!target || !isFormInput(target) || isSensitiveField(target)) return;
     const descriptor = buildElementDescriptor(target);
     const point = getEventCoordinates(event);
     sendRuntimeMessage({ type: MSG.FOCUS, focus: { ...descriptor, ...point } });
@@ -1668,7 +1694,7 @@
   function applyRemoteFocus(payload) {
     if (!uiState.mirrorClicks) return;
     const element = resolveClickTarget(payload);
-    if (!element || !isFormInput(element)) return;
+    if (!element || !isFormInput(element) || isSensitiveField(element)) return;
     try {
       element.focus({ preventScroll: true });
     } catch (_error) {
@@ -1729,24 +1755,25 @@
     rulerPopup.style.cssText = [
       'position:fixed', 'left:12px', `top:${popupY}px`,
       'z-index:2147483641', 'display:flex', 'align-items:center', 'gap:8px',
-      'padding:5px 10px', 'border-radius:8px',
-      'border:1px solid rgba(60,222,149,0.3)',
-      'background:rgba(20,23,28,0.95)', 'color:#f2f2f2',
-      'font:11px/1.35 "Roboto Flex",Arial,sans-serif',
-      'box-shadow:0 4px 16px rgba(0,0,0,0.4)',
+      'padding:6px 10px', 'border-radius:8px',
+      'border:1px solid #2a3732',
+      'background:#15201b', 'color:#e6eeea',
+      'font:500 12px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif',
+      'box-shadow:0 2px 6px rgba(0,0,0,0.12),0 12px 32px rgba(0,0,0,0.24)',
       'pointer-events:auto', 'user-select:none', 'white-space:nowrap'
     ].join(';');
 
     const label = document.createElement('span');
-    label.textContent = 'Thickness:';
-    label.style.color = '#aaa';
+    label.textContent = t('rulerThickness', 'Thickness');
+    label.style.color = '#a3b3ac';
 
     const thicknessInput = document.createElement('input');
     thicknessInput.type = 'number';
     thicknessInput.min = '1';
     thicknessInput.max = '20';
+    thicknessInput.setAttribute('aria-label', t('rulerThickness', 'Thickness'));
     thicknessInput.value = String(ruler.thickness);
-    thicknessInput.style.cssText = 'width:44px;height:22px;padding:0 4px;border:1px solid rgba(255,255,255,0.15);border-radius:5px;background:rgba(255,255,255,0.08);color:#f2f2f2;font:11px/1 inherit;text-align:center;outline:none;';
+    thicknessInput.style.cssText = 'width:48px;height:26px;padding:0 4px;border:1px solid #3a4943;border-radius:6px;background:#1f2a27;color:#e6eeea;font:inherit;text-align:center;outline-color:#7ff0be;';
     thicknessInput.addEventListener('change', () => {
       const t = Math.max(1, Math.min(20, parseInt(thicknessInput.value, 10) || 1));
       thicknessInput.value = String(t);
@@ -1758,12 +1785,12 @@
 
     const pxLabel = document.createElement('span');
     pxLabel.textContent = 'px';
-    pxLabel.style.color = '#aaa';
+    pxLabel.style.color = '#a3b3ac';
 
     const deleteBtn = document.createElement('button');
     deleteBtn.type = 'button';
-    deleteBtn.textContent = 'Delete';
-    deleteBtn.style.cssText = 'padding:2px 8px;border:1px solid rgba(255,80,80,0.4);border-radius:5px;background:rgba(255,80,80,0.1);color:#ff6b6b;cursor:pointer;font:inherit;font-size:11px;line-height:1.4;';
+    deleteBtn.textContent = t('rulerDelete', 'Delete');
+    deleteBtn.style.cssText = 'min-height:26px;padding:2px 10px;border:1px solid #6b3a3a;border-radius:6px;background:transparent;color:#ffa8a8;cursor:pointer;font:inherit;line-height:1.4;outline-color:#7ff0be;';
     deleteBtn.addEventListener('mousedown', (e) => e.stopPropagation());
     deleteBtn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -1919,6 +1946,7 @@
     if (!selectedRulerId) return;
     if (event.key !== 'Backspace' && event.key !== 'Delete') return;
     const active = document.activeElement;
+    if (host && active === host) return;
     if (active && active !== document.body && active.matches('input,textarea,select,[contenteditable="true"]')) return;
     event.preventDefault();
     const id = selectedRulerId;
@@ -2205,6 +2233,12 @@
   }
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    // Only the extension's own service worker talks to this script.
+    if (!sender || sender.id !== chrome.runtime.id || sender.tab) {
+      sendResponse({ ok: false });
+      return false;
+    }
+
     if (!message || typeof message.type !== 'string') {
       sendResponse({ ok: false });
       return false;
@@ -2218,7 +2252,7 @@
     if (message.type === MSG.STATE) {
       uiState = { ...uiState, ...(message.state || {}) };
       if (Array.isArray(message.state?.rulers)) {
-        rulers = message.state.rulers;
+        rulers = sanitizeRulers(message.state.rulers);
         renderRulers();
       }
       updateUi();
@@ -2265,7 +2299,7 @@
     }
 
     if (message.type === MSG.RULER_STATE) {
-      rulers = Array.isArray(message.rulers) ? message.rulers : [];
+      rulers = sanitizeRulers(message.rulers);
       renderRulers();
       sendResponse({ ok: true });
       return false;
@@ -2295,7 +2329,7 @@
     }
 
     if (message.type === MSG.TOAST) {
-      showToast(message.text || '');
+      showToast(typeof message.text === 'string' ? message.text.slice(0, 200) : '');
       sendResponse({ ok: true });
       return false;
     }

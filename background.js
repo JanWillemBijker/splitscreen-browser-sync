@@ -33,6 +33,8 @@ const MSG = Object.freeze({
   POPUP_SET_ALWAYS_SHOW: 'SVSS_POPUP_SET_ALWAYS_SHOW',
   POPUP_SET_DEFAULTS: 'SVSS_POPUP_SET_DEFAULTS',
   POPUP_SHOW_BUTTON_CURRENT: 'SVSS_POPUP_SHOW_BUTTON_CURRENT',
+  POPUP_SET_SYNC: 'SVSS_POPUP_SET_SYNC',
+  POPUP_SET_GROUP_OPTION: 'SVSS_POPUP_SET_GROUP_OPTION',
   RULER_STATE: 'SVSS_RULER_STATE',
   RULER_MOVE: 'SVSS_RULER_MOVE',
   REMOTE_RULER_MOVE: 'SVSS_REMOTE_RULER_MOVE',
@@ -73,6 +75,71 @@ let saveTimer = null;
 
 function debug(...args) {
   if (DEBUG) console.log('[SplitScreen Browser Sync]', ...args);
+}
+
+const EXTENSION_ORIGIN = chrome.runtime.getURL('');
+const MAX_RULERS = 20;
+const MAX_RULER_Y = 100000;
+const RULER_ID_PATTERN = /^r-[a-z0-9]{1,16}-[a-z0-9]{1,8}$/;
+
+// Popup options that may be changed for the current pair, mapped to the
+// group field that stores them.
+const POPUP_GROUP_OPTIONS = Object.freeze({
+  syncNavigation: 'syncNavigation',
+  mirrorClicks: 'mirrorClicks',
+  mirrorHover: 'mirrorHover',
+  hideWpAdminBar: 'hideWpAdminBar'
+});
+
+function t(key, substitutions) {
+  try {
+    return chrome.i18n.getMessage(key, substitutions) || key;
+  } catch (_error) {
+    return key;
+  }
+}
+
+// Messages are only accepted from this extension. Chrome already blocks web
+// pages (no externally_connectable), but we still check the sender so that
+// page-facing messages can only come from our own top-frame content script on
+// an http(s) page, and settings messages only from our own extension pages
+// (chrome-extension://<our id>/..., which no website can host).
+function isFromThisExtension(sender) {
+  return Boolean(sender) && sender.id === chrome.runtime.id;
+}
+
+function isFromExtensionPage(sender) {
+  return isFromThisExtension(sender)
+    && typeof sender.url === 'string'
+    && sender.url.startsWith(EXTENSION_ORIGIN);
+}
+
+function isFromContentScript(sender) {
+  return isFromThisExtension(sender)
+    && Boolean(sender.tab)
+    && typeof sender.tab.id === 'number'
+    && typeof sender.tab.windowId === 'number'
+    && (sender.frameId === undefined || sender.frameId === 0)
+    && isNormalHttpUrl(sender.url || sender.tab.url);
+}
+
+function isValidRulerId(id) {
+  return typeof id === 'string' && RULER_ID_PATTERN.test(id);
+}
+
+function clampRulerY(value) {
+  const y = Number(value);
+  if (!Number.isFinite(y)) return 0;
+  return Math.max(0, Math.min(MAX_RULER_Y, Math.round(y)));
+}
+
+function finiteOr(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function plainObjectOr(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 }
 
 function isNormalHttpUrl(url) {
@@ -643,7 +710,7 @@ async function enableCurrentSplitView(tabId, windowId) {
   if (!group) {
     await safeSendMessage(tabId, {
       type: MSG.TOAST,
-      text: 'No split view pair detected — try again in a moment.'
+      text: t('toastNoPair')
     });
     return;
   }
@@ -831,8 +898,8 @@ async function handleScrollMessage(sender, message) {
   const group = await getGroupForTab(tabId, windowId);
   if (!group || !group.enabled) return;
 
-  group.lastKnownScrollX = Number(message.scrollX || 0);
-  group.lastKnownScrollY = Number(message.scrollY || 0);
+  group.lastKnownScrollX = Math.max(0, finiteOr(message.scrollX));
+  group.lastKnownScrollY = Math.max(0, finiteOr(message.scrollY));
   group.lastSourceTabId = tabId;
   group.error = null;
   group.updatedAt = Date.now();
@@ -913,7 +980,7 @@ async function handleClickMessage(sender, message) {
     type: MSG.REMOTE_CLICK,
     sourceTabId: tabId,
     groupKey: group.groupKey,
-    click: message.click || {},
+    click: plainObjectOr(message.click),
     timestamp: Date.now()
   });
 }
@@ -934,7 +1001,7 @@ async function handleFocusMessage(sender, message) {
 
   await safeSendMessage(targetTabId, {
     type: MSG.REMOTE_FOCUS,
-    focus: message.focus || {}
+    focus: plainObjectOr(message.focus)
   });
 }
 
@@ -956,7 +1023,7 @@ async function handleHoverMessage(sender, message) {
     type: MSG.REMOTE_HOVER,
     sourceTabId: tabId,
     groupKey: group.groupKey,
-    hover: message.hover || {},
+    hover: plainObjectOr(message.hover),
     timestamp: Date.now()
   });
 }
@@ -1034,8 +1101,8 @@ async function handleReadyMessage(sender, message) {
     return;
   }
 
-  if (typeof message.scrollX === 'number') group.lastKnownScrollX = message.scrollX;
-  if (typeof message.scrollY === 'number') group.lastKnownScrollY = message.scrollY;
+  if (Number.isFinite(message.scrollX)) group.lastKnownScrollX = Math.max(0, message.scrollX);
+  if (Number.isFinite(message.scrollY)) group.lastKnownScrollY = Math.max(0, message.scrollY);
   if (isNormalHttpUrl(message.url)) {
     const side = getSide(group, tabId);
     if (side === 'left') group.leftOrigin = getOrigin(message.url) || group.leftOrigin;
@@ -1121,17 +1188,38 @@ async function getActiveTab() {
   return tabs[0] || null;
 }
 
+function summarizeGroupForPopup(group) {
+  if (!group) return null;
+  const reloading = Boolean(group.isReloadingTabs && Object.keys(group.isReloadingTabs).length);
+  return {
+    enabled: Boolean(group.enabled),
+    error: Boolean(group.error),
+    reloading,
+    offsetY: Number(group.offsetY || 0),
+    syncNavigation: Boolean(group.syncNavigation),
+    mirrorClicks: Boolean(group.mirrorClicks),
+    mirrorHover: Boolean(group.mirrorHover),
+    hideWpAdminBar: Boolean(group.hideWpAdminBar),
+    rulerCount: Array.isArray(group.rulers) ? group.rulers.length : 0
+  };
+}
+
 async function getPopupStatus() {
   const settings = await getSettings();
   const activeTab = await getActiveTab();
 
   if (!activeTab?.id || typeof activeTab.windowId !== 'number' || !isNormalHttpUrl(activeTab.url)) {
+    // Without an http(s) URL we cannot inject. If Chrome reports a split view
+    // the user is on an internal or restricted page; otherwise it's simply
+    // not in a split view.
+    const inSplit = isValidSplitViewId(activeTab?.splitViewId);
     return {
       ok: true,
       settings,
+      reason: inSplit ? 'unsupported-page' : 'not-in-split',
       isInValidSplitView: false,
       canShowCurrent: false,
-      hint: 'Current tab is not in a split screen.'
+      group: null
     };
   }
 
@@ -1140,15 +1228,38 @@ async function getPopupStatus() {
   const buttonShownForCurrent = group ? await shouldShowFloatingUi(group) : false;
   const manualButtonOverride = group ? await getManualButtonOverride(group.groupKey) : 'default';
 
+  let reason = 'ok';
+  if (!group) {
+    // In a split view but the pair is not two http(s) pages.
+    reason = isValidSplitViewId(activeTab.splitViewId) ? 'unsupported-page' : 'not-in-split';
+  }
+
   return {
     ok: true,
     settings,
+    reason,
     isInValidSplitView: Boolean(group),
     canShowCurrent: Boolean(group),
     buttonShownForCurrent,
     manualButtonOverride,
-    hint: group ? '' : 'Current tab is not in a split screen.'
+    group: summarizeGroupForPopup(group)
   };
+}
+
+async function setSyncForActiveSplit(value) {
+  const activeTab = await getActiveTab();
+  if (!activeTab?.id || typeof activeTab.windowId !== 'number') return getPopupStatus();
+  if (value) await enableCurrentSplitView(activeTab.id, activeTab.windowId);
+  else await stopCurrentSplitView(activeTab.id, activeTab.windowId);
+  return getPopupStatus();
+}
+
+async function setOptionForActiveSplit(option, value) {
+  const field = Object.prototype.hasOwnProperty.call(POPUP_GROUP_OPTIONS, option) ? POPUP_GROUP_OPTIONS[option] : null;
+  const activeTab = await getActiveTab();
+  if (!field || !activeTab?.id || typeof activeTab.windowId !== 'number') return getPopupStatus();
+  await setGroupBooleanOption(activeTab.id, activeTab.windowId, field, Boolean(value));
+  return getPopupStatus();
 }
 
 async function toggleButtonForCurrentSplit() {
@@ -1187,15 +1298,18 @@ async function sendRulerState(group, targetTabId = null) {
   }
 }
 
-async function handlePopupRulerAdd() {
-  const activeTab = await getActiveTab();
-  if (!activeTab?.id || typeof activeTab.windowId !== 'number') return;
+async function handlePopupRulerAdd(sender) {
+  // From the on-page panel the sender tab is the target; from the toolbar
+  // popup it is the active tab.
+  const sourceTab = sender?.tab || await getActiveTab();
+  if (!sourceTab?.id || typeof sourceTab.windowId !== 'number') return;
 
-  await scanWindow(activeTab.windowId);
-  const group = await getGroupForTab(activeTab.id, activeTab.windowId);
+  await scanWindow(sourceTab.windowId);
+  const group = await getGroupForTab(sourceTab.id, sourceTab.windowId);
   if (!group) return;
 
   group.rulers = Array.isArray(group.rulers) ? group.rulers : [];
+  if (group.rulers.length >= MAX_RULERS) return;
   group.rulers.push({ id: generateRulerId(), y: 300, thickness: 2 });
   scheduleSaveState();
   await sendRulerState(group);
@@ -1207,21 +1321,20 @@ async function handleRulerMoveMessage(sender, message) {
   if (typeof tabId !== 'number' || typeof windowId !== 'number') return;
 
   const group = await getGroupForTab(tabId, windowId);
-  if (!group) return;
+  if (!group || !isValidRulerId(message.id)) return;
 
   const ruler = Array.isArray(group.rulers) ? group.rulers.find((r) => r.id === message.id) : null;
-  if (ruler) {
-    ruler.y = Number(message.y) || 0;
-    scheduleSaveState();
-  }
+  if (!ruler) return;
+  ruler.y = clampRulerY(message.y);
+  scheduleSaveState();
 
   const targetTabId = getPeerTabId(group, tabId);
   if (!targetTabId) return;
 
   await safeSendMessage(targetTabId, {
     type: MSG.REMOTE_RULER_MOVE,
-    id: message.id,
-    y: ruler ? ruler.y : Number(message.y) || 0
+    id: ruler.id,
+    y: ruler.y
   });
 }
 
@@ -1231,7 +1344,7 @@ async function handleRulerDeleteMessage(sender, message) {
   if (typeof tabId !== 'number' || typeof windowId !== 'number') return;
 
   const group = await getGroupForTab(tabId, windowId);
-  if (!group) return;
+  if (!group || !isValidRulerId(message.id)) return;
 
   group.rulers = Array.isArray(group.rulers) ? group.rulers.filter((r) => r.id !== message.id) : [];
   scheduleSaveState();
@@ -1247,7 +1360,7 @@ async function handleRulerUpdateMessage(sender, message) {
   if (!group) return;
 
   const ruler = Array.isArray(group.rulers) ? group.rulers.find((r) => r.id === message.id) : null;
-  if (ruler && typeof message.thickness === 'number') {
+  if (ruler && Number.isFinite(message.thickness)) {
     ruler.thickness = Math.max(1, Math.min(20, Math.round(message.thickness)));
   }
   scheduleSaveState();
@@ -1256,7 +1369,22 @@ async function handleRulerUpdateMessage(sender, message) {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
-    if (!message || typeof message.type !== 'string') {
+    if (!message || typeof message.type !== 'string' || !isFromThisExtension(sender)) {
+      sendResponse({ ok: false });
+      return;
+    }
+
+    const fromPage = isFromContentScript(sender);
+    const fromPopup = isFromExtensionPage(sender);
+    const isPopupMessage = message.type.startsWith('SVSS_POPUP_');
+
+    // POPUP_RULER_ADD is also sent by the on-page panel; every other popup
+    // message is reserved for extension pages, and every other message for
+    // the content script.
+    const allowed = message.type === MSG.POPUP_RULER_ADD
+      ? (fromPage || fromPopup)
+      : (isPopupMessage ? fromPopup : fromPage);
+    if (!allowed) {
       sendResponse({ ok: false });
       return;
     }
@@ -1351,8 +1479,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return;
     }
 
+    if (message.type === MSG.POPUP_SET_SYNC) {
+      sendResponse(await setSyncForActiveSplit(Boolean(message.value)));
+      return;
+    }
+
+    if (message.type === MSG.POPUP_SET_GROUP_OPTION) {
+      sendResponse(await setOptionForActiveSplit(String(message.option || ''), Boolean(message.value)));
+      return;
+    }
+
     if (message.type === MSG.POPUP_RULER_ADD) {
-      await handlePopupRulerAdd();
+      await handlePopupRulerAdd(fromPage ? sender : null);
       sendResponse({ ok: true });
       return;
     }
@@ -1383,7 +1521,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (group) {
           const targetTabId = getPeerTabId(group, tabId);
           if (targetTabId) {
-            await safeSendMessage(targetTabId, { type: MSG.REMOTE_RULER_SELECT, id: message.id ?? null });
+            const id = isValidRulerId(message.id) ? message.id : null;
+            await safeSendMessage(targetTabId, { type: MSG.REMOTE_RULER_SELECT, id });
           }
         }
       }
@@ -1394,7 +1533,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ ok: false });
   })().catch((error) => {
     debug('onMessage error', error);
-    sendResponse({ ok: false, error: error?.message || String(error) });
+    sendResponse({ ok: false });
   });
 
   return true;

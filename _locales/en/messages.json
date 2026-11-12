@@ -1,0 +1,227 @@
+{
+  "extName": {
+    "message": "SplitScreen Browser Sync"
+  },
+  "extDescription": {
+    "message": "Sync scrolling, clicks and hover between the two tabs of a Chrome Split View. Made for comparing live and staging sites."
+  },
+  "cmdSyncCurrent": {
+    "message": "Start sync for the current Split View"
+  },
+  "cmdSyncAll": {
+    "message": "Start sync for all Split Views in this window"
+  },
+  "cmdStopCurrent": {
+    "message": "Stop sync for the current Split View"
+  },
+  "cmdHardReload": {
+    "message": "Hard reload the active pane"
+  },
+  "statusSyncedTitle": {
+    "message": "Synced"
+  },
+  "statusSyncedBody": {
+    "message": "Both panes scroll together."
+  },
+  "statusPausedTitle": {
+    "message": "Paused"
+  },
+  "statusPausedBody": {
+    "message": "Split View found. Start sync to link both panes."
+  },
+  "statusReloadingTitle": {
+    "message": "Reloading"
+  },
+  "statusReloadingBody": {
+    "message": "A pane is reloading. Sync picks up again when it's done."
+  },
+  "statusErrorTitle": {
+    "message": "Other pane not responding"
+  },
+  "statusErrorBody": {
+    "message": "Reload the other pane, then start sync again."
+  },
+  "statusNoSplitTitle": {
+    "message": "Not in a Split View"
+  },
+  "statusNoSplitBody": {
+    "message": "Put two web pages side by side to compare them."
+  },
+  "emptyStep1": {
+    "message": "Right-click a tab and choose “Add tab to new split view”."
+  },
+  "emptyStep2": {
+    "message": "Pick the second page. Both must be regular websites (http or https)."
+  },
+  "emptyStep3": {
+    "message": "Open this menu again and press Start sync."
+  },
+  "statusUnsupportedTitle": {
+    "message": "This page can't be synced"
+  },
+  "statusUnsupportedBody": {
+    "message": "Chrome pages, the Web Store and local files are closed to extensions. Open a regular website in a Split View."
+  },
+  "metaOffset": {
+    "message": "Scroll offset $OFFSET$ px",
+    "placeholders": {
+      "offset": {
+        "content": "$1",
+        "example": "+20"
+      }
+    }
+  },
+  "btnStartSync": {
+    "message": "Start sync"
+  },
+  "btnStopSync": {
+    "message": "Stop sync"
+  },
+  "btnSyncAll": {
+    "message": "Sync all Split Views"
+  },
+  "sectionThisSplit": {
+    "message": "This Split View"
+  },
+  "sectionThisSplitHelp": {
+    "message": "Changes apply to both panes right away."
+  },
+  "optNavigation": {
+    "message": "Sync navigation"
+  },
+  "optNavigationHelp": {
+    "message": "Opens the same path on the other side, on its own domain."
+  },
+  "optClicks": {
+    "message": "Mirror clicks"
+  },
+  "optClicksHelp": {
+    "message": "Repeats clicks on the matching element. Never on password or payment fields."
+  },
+  "optHover": {
+    "message": "Mirror hover effects"
+  },
+  "optHoverHelp": {
+    "message": "Shows hover styles and hover menus on both sides."
+  },
+  "optWpAdminBar": {
+    "message": "Hide WordPress admin bar"
+  },
+  "optWpAdminBarHelp": {
+    "message": "Hides the toolbar while syncing so both layouts line up."
+  },
+  "btnAddRuler": {
+    "message": "Add ruler"
+  },
+  "btnShowPanel": {
+    "message": "Show on-page button"
+  },
+  "btnHidePanel": {
+    "message": "Hide on-page button"
+  },
+  "sectionDefaults": {
+    "message": "Defaults for new Split Views"
+  },
+  "sectionDefaultsHelp": {
+    "message": "Used when a new pair is found. Existing pairs keep their own settings."
+  },
+  "sectionButton": {
+    "message": "On-page button"
+  },
+  "optAlwaysShow": {
+    "message": "Show in every Split View"
+  },
+  "optAlwaysShowHelp": {
+    "message": "Turn off to show the floating button only when you choose to."
+  },
+  "footerShortcuts": {
+    "message": "Keyboard shortcuts"
+  },
+  "footerMadeBy": {
+    "message": "Made by"
+  },
+  "panelClose": {
+    "message": "Close"
+  },
+  "bubbleLabel": {
+    "message": "Open SplitScreen Browser Sync controls"
+  },
+  "pillSynced": {
+    "message": "Synced"
+  },
+  "pillPaused": {
+    "message": "Paused"
+  },
+  "pillReloading": {
+    "message": "Reloading"
+  },
+  "pillError": {
+    "message": "Not responding"
+  },
+  "sectionOptions": {
+    "message": "Options"
+  },
+  "sectionOffset": {
+    "message": "Scroll offset"
+  },
+  "offsetHelp": {
+    "message": "The right pane scrolls this many pixels further than the left."
+  },
+  "offsetInputLabel": {
+    "message": "Scroll offset in pixels"
+  },
+  "btnApply": {
+    "message": "Apply"
+  },
+  "btnReset": {
+    "message": "Reset"
+  },
+  "sectionReload": {
+    "message": "Reload"
+  },
+  "colLeft": {
+    "message": "Left"
+  },
+  "colRight": {
+    "message": "Right"
+  },
+  "btnReload": {
+    "message": "Reload"
+  },
+  "btnHardReload": {
+    "message": "Hard reload"
+  },
+  "reloadLeftLabel": {
+    "message": "Reload left pane"
+  },
+  "reloadRightLabel": {
+    "message": "Reload right pane"
+  },
+  "hardReloadLeftLabel": {
+    "message": "Hard reload left pane, bypassing the cache"
+  },
+  "hardReloadRightLabel": {
+    "message": "Hard reload right pane, bypassing the cache"
+  },
+  "btnSwap": {
+    "message": "Swap sides"
+  },
+  "btnRuler": {
+    "message": "Add ruler"
+  },
+  "rulerThickness": {
+    "message": "Thickness"
+  },
+  "rulerDelete": {
+    "message": "Delete"
+  },
+  "rulerLabel": {
+    "message": "Ruler line. Drag to move, press Delete to remove."
+  },
+  "toastNoPair": {
+    "message": "No Split View pair found. Try again in a moment."
+  },
+  "panelTitle": {
+    "message": "SplitScreen Sync"
+  }
+}

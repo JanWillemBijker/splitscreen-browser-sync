@@ -1,8 +1,34 @@
 # SplitScreen Browser Sync
 
-Version: 1.1.0
+Version: 1.1.0 · Made by [BijBijker](https://bijbijker.nl)
 
-Manifest V3 Chrome Extension for pixel-perfect scroll sync between two tabs in Chrome native Split View.
+Manifest V3 Chrome Extension for pixel-perfect scroll sync between two tabs in Chrome native Split View. Requires Chrome 140 or newer. Available in English and Dutch.
+
+## Install
+
+From the Chrome Web Store (once published), or locally:
+
+1. Download or clone this repository.
+2. Open `chrome://extensions` and enable **Developer mode**.
+3. Click **Load unpacked** and select the repository folder.
+4. Right-click a tab and choose **Add tab to new split view**, then pick a second http/https page.
+5. Click the extension icon and press **Start sync** (or use the floating button on the page, or `Alt+Shift+S`).
+
+## Privacy
+
+The extension collects no data, has no server, analytics or remote code, and only stores settings and per-pair state locally (`chrome.storage.local` / `chrome.storage.session`). Password, one-time-code and payment card fields are never read and clicks/focus on them are never mirrored. Full policy: [store/PRIVACY.md](store/PRIVACY.md).
+
+## Packaging for the Chrome Web Store
+
+```sh
+./package.sh
+```
+
+Runs `node --check` on all scripts, validates the JSON files and writes `dist/splitscreen-browser-sync-<version>.zip` containing only the runtime files. Store texts, permission justifications and the publishing checklist are in [store/LISTING.md](store/LISTING.md); screenshots and promo images in `store/images/`.
+
+## Credits
+
+Made by BijBijker – https://bijbijker.nl
 
 ## What it does
 
@@ -21,6 +47,25 @@ Manifest V3 Chrome Extension for pixel-perfect scroll sync between two tabs in C
 - Optionally mirrors hover effects (CSS `:hover` styling and JS-driven hover menus) between panes.
 
 ## Changes in 1.1.0
+
+### Redesigned interface
+
+- New toolbar popup: the status of the current Split View pair (synced, paused, reloading, not responding, not in a Split View, unsupported page) is visible at a glance, with one primary **Start sync / Stop sync** button.
+- The popup can now change the options of the current pair directly (sync navigation, mirror clicks, mirror hover, hide WordPress admin bar), add a ruler and show/hide the on-page button.
+- Defaults for new Split Views and the on-page button setting are grouped in collapsible sections with helper text.
+- Empty state with step-by-step instructions when the tab is not in a Split View.
+- Redesigned on-page panel and floating button, light and dark mode (`prefers-color-scheme`), WCAG AA contrast, visible keyboard focus, Escape closes the panel, focus is kept when the panel re-renders.
+- System fonts only; no remote fonts.
+- New icon set: two panes linked by a sync arrow (128 px icon with 96 px artwork and padding, as the store requires).
+- English and Dutch UI via `_locales` (default English).
+- Footer credit "Made by BijBijker" in the popup.
+
+### Security and store compliance
+
+- Removed the `tabs` permission (host permissions already cover http/https tab URLs) and `web_accessible_resources` (the floating button icon is now drawn inline).
+- The service worker validates every message sender: page-facing messages only from the extension's own top-frame content script on an http/https page, settings messages only from the extension's own pages. The content script only accepts messages from the extension's service worker.
+- Ruler IDs, positions and thickness are validated; payloads are type-checked.
+- Click/hover descriptors never include form field values. Password, one-time-code and payment card fields are excluded from click and focus mirroring.
 
 ### Synchronized ruler lines
 
@@ -86,7 +131,7 @@ Manifest V3 Chrome Extension for pixel-perfect scroll sync between two tabs in C
 ## Files
 
 ```text
-splitview-scroll-sync/
+splitview-browser-sync/
 ├── manifest.json
 ├── background.js
 ├── content.js
@@ -94,26 +139,20 @@ splitview-scroll-sync/
 ├── popup.html
 ├── popup.css
 ├── popup.js
-├── README.md
-└── icons/
+├── _locales/        en + nl UI strings
+├── icons/
+├── package.sh       builds dist/splitscreen-browser-sync-<version>.zip
+├── store/           listing texts, privacy policy, store images (not packaged)
+└── README.md
 ```
-
-## Installation
-
-1. Open Chrome and go to `chrome://extensions`.
-2. Enable **Developer mode**.
-3. Click **Load unpacked**.
-4. Select the `splitview-scroll-sync` folder.
-5. Open two normal HTTP/HTTPS pages.
-6. Put the two tabs in Chrome native Split View.
-7. Click the floating button in the lower-left corner.
-8. Click **Start sync**.
 
 ## Toolbar popup
 
 Click the extension icon in Chrome's toolbar to open a small settings popup.
 
-### Always show button on split screen
+The popup shows the status of the current pair, a **Start sync / Stop sync** button, the options for the current pair (**This Split View**), and two collapsible sections described below.
+
+### Always show button on split screen (On-page button → Show in every Split View)
 
 Default: enabled.
 
@@ -191,7 +230,7 @@ When sync stops or the option is disabled, the style element is removed again an
 
 ## Navigation sync
 
-Default: off.
+Default: on for new pairs (change it under **Defaults for new Split Views** in the popup).
 
 When **Sync navigation** is enabled for a Split View group, navigating one side mirrors the same path, query string, and hash to the other side while preserving the other side's origin.
 
@@ -220,7 +259,7 @@ Navigation sync only mirrors normal HTTP/HTTPS URLs. It does not mirror `chrome:
 
 ## Mirror clicks
 
-Default: off. Toggle: **Mirror clicks** (per Split View group).
+Default: on for new pairs. Toggle: **Mirror clicks** (per Split View group).
 
 When enabled, every primary (left) mouse click on one pane is reproduced on the
 other pane. This intentionally includes clicks on non-button elements such as
@@ -257,7 +296,7 @@ silently. Clicks inside the extension's own floating UI are never mirrored.
 
 ## Mirror hover effects
 
-Default: off. Toggle: **Mirror hover effects** (per Split View group).
+Default: on for new pairs. Toggle: **Mirror hover effects** (per Split View group).
 
 When enabled, hovering an element on one pane reproduces the hover state on the
 matching element on the other pane, so hover styling can be checked visually
@@ -291,16 +330,6 @@ Hover updates are sent only when the hovered element changes (throttled to the
 animation frame), and the same `isTrusted` rule used for clicks prevents hover
 loops.
 
-## v1.3.0 UI refinements
-
-- Uses `Roboto Flex`, `Roboto`, `Arial`, `sans-serif` across the extension UI without loading external fonts.
-- Removes duplicate Offset labeling in the floating popup.
-- Removes the top status cards from the floating popup.
-- Keeps `Start sync` as a green outline button until sync is active, then fills it green.
-- Keeps `Apply` as a green outline button.
-- Adds dynamic toolbar popup text for showing or hiding the button on the current split screen.
-- Adds version and author metadata to the toolbar popup footer.
-
 ## Keyboard shortcuts
 
 | Command | Default shortcut | Action |
@@ -329,7 +358,13 @@ chrome://extensions/shortcuts
 - [ ] Create a Chrome native Split View with exactly two normal HTTP/HTTPS tabs.
 - [ ] The floating button appears when automatic display is enabled.
 - [ ] The toolbar popup can hide automatic display.
-- [ ] The toolbar button switches between `Show button on current split screen` and `Hide button on current split screen`.
+- [ ] The toolbar popup button switches between `Show on-page button` and `Hide on-page button`.
+- [ ] The popup shows `Synced` / `Paused` for the current pair and **Start sync / Stop sync** works from the popup.
+- [ ] Popup options under `This Split View` change the current pair immediately (check the on-page panel).
+- [ ] Outside a Split View the popup shows `Not in a Split View` with the three setup steps.
+- [ ] On `chrome://` pages inside a Split View the popup shows `This page can't be synced`.
+- [ ] With Chrome set to Dutch, the popup and panel are in Dutch.
+- [ ] Clicking a password field on one side does not focus or click the field on the other side.
 - [ ] Manual hide overrides automatic display for the current Split View group during the current session.
 - [ ] The popup contains no Split View ID or technical pair information.
 - [ ] The popup's "Defaults for new sessions" toggles persist after closing/reopening the popup.
@@ -339,7 +374,7 @@ chrome://extensions/shortcuts
 - [ ] The Offset number input accepts custom positive and negative pixel values.
 - [ ] `Apply` and `Reset` are next to each other.
 - [ ] The popup does not show top status cards such as `Sync off`, `Offset: 0px`, `Navigation sync: on`, or `Click sync: on`.
-- [ ] Roboto Flex is used in the floating UI and toolbar popup, with safe fallbacks.
+- [ ] The system font is used in the floating UI and toolbar popup; no remote fonts are loaded.
 - [ ] Click **Start sync**.
 - [ ] Scrolling left moves right immediately.
 - [ ] Scrolling right moves left immediately.
@@ -352,7 +387,7 @@ chrome://extensions/shortcuts
 
 ### Navigation sync
 
-- [ ] Keep **Sync navigation** off by default.
+- [ ] **Sync navigation** is on by default for a new pair.
 - [ ] Open live/staging pages with different origins and the same path.
 - [ ] Enable **Sync navigation**.
 - [ ] Navigate on the left side.
@@ -363,8 +398,7 @@ chrome://extensions/shortcuts
 
 ### Mirror clicks
 
-- [ ] Keep **Mirror clicks** off by default.
-- [ ] Enable **Mirror clicks**.
+- [ ] **Mirror clicks** is on by default for a new pair (or enable it).
 - [ ] Click a normal button, menu button, search button, or accordion button on one side.
 - [ ] The other side clicks the matching element.
 - [ ] Open a modal/overlay, then click outside it (on the backdrop); the other side closes its overlay too.
@@ -374,8 +408,7 @@ chrome://extensions/shortcuts
 
 ### Mirror hover effects
 
-- [ ] Keep **Mirror hover effects** off by default.
-- [ ] Enable **Mirror hover effects**.
+- [ ] **Mirror hover effects** is on by default for a new pair (or enable it).
 - [ ] Hover a link or button with a CSS hover style on one side; the same element shows the hover style on the other side.
 - [ ] Hover a menu that opens a submenu on hover; the submenu opens on the other side.
 - [ ] Move the mouse away; the hover style and submenu clear on the other side.
