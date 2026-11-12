@@ -46,6 +46,11 @@
     FIELD_INPUT: 'SVSS_FIELD_INPUT',
     VIEWPORT: 'SVSS_VIEWPORT',
     OVERLAY_IMAGE: 'SVSS_OVERLAY_IMAGE',
+    INSPECT_HOVER: 'SVSS_INSPECT_HOVER',
+    REMOTE_INSPECT: 'SVSS_REMOTE_INSPECT',
+    INSPECT_RESULT: 'SVSS_INSPECT_RESULT',
+    INSPECT_CLEAR: 'SVSS_INSPECT_CLEAR',
+    REMOTE_INSPECT_CLEAR: 'SVSS_REMOTE_INSPECT_CLEAR',
     CAPTURE_HIDE_UI: 'SVSS_CAPTURE_HIDE_UI',
     CAPTURE_RESTORE_UI: 'SVSS_CAPTURE_RESTORE_UI',
     GET_VIEWPORT: 'SVSS_GET_VIEWPORT',
@@ -78,7 +83,8 @@
     CHECKLIST_GO: 'CHECKLIST_GO',
     CHECKLIST_MARK: 'CHECKLIST_MARK',
     OVERLAY_SET: 'OVERLAY_SET',
-    OVERLAY_REFRESH: 'OVERLAY_REFRESH'
+    OVERLAY_REFRESH: 'OVERLAY_REFRESH',
+    INSPECT_SET: 'INSPECT_SET'
   });
 
   const HOST_ID = 'svss-root';
@@ -1060,7 +1066,12 @@
     optionsSection.appendChild(createToggle(t('optWpAdminBar', 'Hide WordPress admin bar'), uiState.hideWpAdminBar, CMD.SET_WP_ADMIN_BAR));
     panel.appendChild(optionsSection);
 
-    if (uiState.enabled) panel.appendChild(createOverlaySection());
+    if (uiState.enabled) {
+      const inspectSection = createSection(t('sectionInspect', 'CSS differences'));
+      inspectSection.appendChild(createToggle(t('inspectToggle', 'Inspect differences'), uiState.inspect, CMD.INSPECT_SET));
+      panel.appendChild(inspectSection);
+      panel.appendChild(createOverlaySection());
+    }
 
     const offsetSection = createSection(t('sectionOffset', 'Scroll offset'), t('offsetHelp', ''));
     const offsetRow = document.createElement('div');
@@ -1323,6 +1334,7 @@
     reconcileHoverFeatureState();
     reconcileCursorFeatureState();
     reconcileOverlay();
+    reconcileInspect();
 
     if (!uiState.show) {
       hideFloatingUi();
@@ -3649,6 +3661,367 @@
     captureRestoreTimer = hidden ? setTimeout(() => setOwnUiHiddenForCapture(false), 1500) : null;
   }
 
+  // ---- Inspect differences ------------------------------------------------------
+  // Hover an element: it is outlined here, the other pane outlines the
+  // matching element, and a small panel lists the checked CSS properties that
+  // differ, plus the box size. Click freezes/unfreezes the selection (the
+  // click does not reach the page while inspecting); Esc ends the mode. Only
+  // style values of the two elements are exchanged.
+  const INSPECT_HOST_ID = 'svss-inspect-root';
+  const INSPECT_PROPS = [
+    'display', 'position', 'box-sizing', 'margin', 'padding', 'border-width', 'border-radius',
+    'font-family', 'font-size', 'font-weight', 'font-style', 'line-height', 'letter-spacing',
+    'text-align', 'text-transform', 'text-decoration-line', 'color', 'background-color',
+    'opacity', 'box-shadow', 'gap', 'flex-direction', 'justify-content', 'align-items', 'z-index'
+  ];
+  const INSPECT_CSS = `
+    :host { all: initial; }
+    .box { position: fixed; pointer-events: none; border: 2px solid #3cde95; background: rgba(60, 222, 149, 0.12); border-radius: 2px; display: none; }
+    .box.peer { border-style: dashed; border-color: #2ec4d6; background: rgba(46, 196, 214, 0.12); }
+    .tag {
+      position: absolute; left: -2px; bottom: 100%; margin-bottom: 4px; padding: 2px 6px; border-radius: 4px;
+      background: #15201b; color: #e6eeea; white-space: nowrap;
+      font: 600 11px/1.3 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    }
+    .box.below .tag { bottom: auto; top: 100%; margin: 4px 0 0; }
+    .card {
+      position: fixed; display: none; width: 300px; max-height: 60vh; overflow: hidden; pointer-events: none;
+      padding: 10px 12px; border-radius: 10px; border: 1px solid #2a3732; background: #15201b; color: #e6eeea;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.12), 0 18px 44px rgba(0,0,0,0.28);
+      font: 400 12px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    }
+    .card h3 { margin: 0 0 2px; font-size: 12px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .card .meta { margin: 0 0 8px; color: #a3b3ac; font-size: 11px; }
+    .card table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    .card th { padding: 0 0 4px; color: #a3b3ac; font-size: 10.5px; font-weight: 600; text-align: left; }
+    .card td { padding: 3px 4px 3px 0; border-top: 1px solid #2a3732; vertical-align: top; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+    .card td:first-child { color: #a3b3ac; width: 34%; }
+    .card .same { color: #6eebb4; margin: 0; }
+    .card .none { color: #ffc58f; margin: 0; }
+    .card .hint { margin: 8px 0 0; color: #a3b3ac; font-size: 10.5px; }
+    .swatch { display: inline-block; width: 9px; height: 9px; margin-right: 4px; border-radius: 2px; border: 1px solid rgba(255,255,255,0.4); vertical-align: -1px; }
+  `;
+
+  let inspectHost = null;
+  let inspectShadow = null;
+  let inspectBox = null;
+  let inspectTag = null;
+  let inspectPeerBox = null;
+  let inspectPeerTag = null;
+  let inspectCard = null;
+  let inspectEl = null;
+  let inspectPeerEl = null;
+  let inspectFrozen = false;
+  let inspectSeq = 0;
+  let inspectPending = false;
+  let inspectPoint = { x: 0, y: 0 };
+  let inspectLocal = null;
+
+  function inspectOn() {
+    return Boolean(uiState.enabled && uiState.inspect);
+  }
+
+  function teardownInspect() {
+    if (inspectHost) {
+      ourExtraHosts.delete(inspectHost);
+      inspectHost.remove();
+    }
+    inspectHost = null;
+    inspectShadow = null;
+    inspectBox = null;
+    inspectTag = null;
+    inspectPeerBox = null;
+    inspectPeerTag = null;
+    inspectCard = null;
+    inspectEl = null;
+    inspectPeerEl = null;
+    inspectFrozen = false;
+    inspectLocal = null;
+  }
+
+  function ensureInspectLayer() {
+    if (inspectHost && inspectHost.isConnected && inspectHost.parentNode === document.documentElement) {
+      removeForeignNodes([INSPECT_HOST_ID], inspectHost);
+      return true;
+    }
+    teardownInspect();
+    removeForeignNodes([INSPECT_HOST_ID], null);
+    if (!document.documentElement) return false;
+    inspectHost = document.createElement('div');
+    inspectHost.id = INSPECT_HOST_ID;
+    const declarations = {
+      display: 'block', visibility: 'visible', opacity: '1', filter: 'none', transform: 'none',
+      position: 'fixed', top: '0', left: '0', width: '0', height: '0', margin: '0', padding: '0',
+      border: '0', overflow: 'visible', 'pointer-events': 'none', 'z-index': '2147483645'
+    };
+    for (const [property, value] of Object.entries(declarations)) inspectHost.style.setProperty(property, value, 'important');
+    inspectHost.setAttribute('aria-hidden', 'true');
+    document.documentElement.appendChild(inspectHost);
+    ourExtraHosts.add(inspectHost);
+    inspectShadow = inspectHost.attachShadow({ mode: 'closed' });
+    const style = document.createElement('style');
+    style.textContent = INSPECT_CSS;
+    inspectBox = document.createElement('div');
+    inspectBox.className = 'box';
+    inspectTag = document.createElement('span');
+    inspectTag.className = 'tag';
+    inspectBox.appendChild(inspectTag);
+    inspectPeerBox = document.createElement('div');
+    inspectPeerBox.className = 'box peer';
+    inspectPeerTag = document.createElement('span');
+    inspectPeerTag.className = 'tag';
+    inspectPeerBox.appendChild(inspectPeerTag);
+    inspectCard = document.createElement('div');
+    inspectCard.className = 'card';
+    inspectShadow.append(style, inspectBox, inspectPeerBox, inspectCard);
+    return true;
+  }
+
+  function elementLabel(element) {
+    if (!(element instanceof Element)) return '';
+    let label = element.tagName.toLowerCase();
+    if (element.id) label += `#${element.id}`;
+    const classes = Array.from(element.classList || []).filter((name) => !name.startsWith('svss-')).slice(0, 2);
+    if (classes.length) label += `.${classes.join('.')}`;
+    return label.slice(0, 80);
+  }
+
+  function readInspectStyles(element) {
+    const styles = {};
+    let computed = null;
+    try { computed = getComputedStyle(element); } catch (_error) { return styles; }
+    const four = (prefix, suffix = '') => ['top', 'right', 'bottom', 'left']
+      .map((side) => computed.getPropertyValue(`${prefix}-${side}${suffix}`)).join(' ');
+    for (const prop of INSPECT_PROPS) {
+      let value;
+      if (prop === 'margin') value = four('margin');
+      else if (prop === 'padding') value = four('padding');
+      else if (prop === 'border-width') value = four('border', '-width');
+      else value = computed.getPropertyValue(prop);
+      styles[prop] = String(value || '').trim().slice(0, 200);
+    }
+    return styles;
+  }
+
+  function readBox(element) {
+    const rect = element.getBoundingClientRect();
+    return { w: Math.round(rect.width * 10) / 10, h: Math.round(rect.height * 10) / 10 };
+  }
+
+  function placeBox(box, tag, element, text) {
+    if (!box) return;
+    if (!(element instanceof Element) || !element.isConnected) {
+      box.style.display = 'none';
+      return;
+    }
+    const rect = element.getBoundingClientRect();
+    box.style.display = 'block';
+    box.style.left = `${rect.left - 2}px`;
+    box.style.top = `${rect.top - 2}px`;
+    box.style.width = `${rect.width + 4}px`;
+    box.style.height = `${rect.height + 4}px`;
+    box.classList.toggle('below', rect.top < 28);
+    tag.textContent = text;
+  }
+
+  function sideName(side) {
+    return t(side === 'left' ? 'colLeft' : 'colRight', side);
+  }
+
+  function shortValue(value) {
+    return String(value || '').replace(/\s+/g, ' ').slice(0, 60);
+  }
+
+  function valueCell(value) {
+    const cell = document.createElement('td');
+    const text = shortValue(value);
+    if (/^(rgb|rgba|#)/.test(text)) {
+      const swatch = document.createElement('span');
+      swatch.className = 'swatch';
+      swatch.style.background = text;
+      cell.appendChild(swatch);
+    }
+    cell.appendChild(document.createTextNode(text || '–'));
+    return cell;
+  }
+
+  function renderInspectCard(result) {
+    if (!inspectCard || !inspectLocal) return;
+    inspectCard.textContent = '';
+    const mySide = uiState.side === 'right' ? 'right' : 'left';
+    const otherSide = mySide === 'left' ? 'right' : 'left';
+    const title = document.createElement('h3');
+    title.textContent = inspectLocal.label;
+    inspectCard.appendChild(title);
+
+    if (!result) {
+      const wait = document.createElement('p');
+      wait.className = 'meta';
+      wait.textContent = '…';
+      inspectCard.appendChild(wait);
+    } else if (!result.found) {
+      const none = document.createElement('p');
+      none.className = 'none';
+      none.textContent = t('inspectNoMatch', 'No matching element on the other side.');
+      inspectCard.appendChild(none);
+    } else {
+      const meta = document.createElement('p');
+      meta.className = 'meta';
+      const box = result.box || {};
+      meta.textContent = `${sideName(mySide)} ${inspectLocal.box.w} × ${inspectLocal.box.h} · ${sideName(otherSide)} ${box.w} × ${box.h}`;
+      inspectCard.appendChild(meta);
+      const rows = INSPECT_PROPS.filter((prop) => (inspectLocal.styles[prop] || '') !== (result.styles?.[prop] || ''));
+      if (!rows.length) {
+        const same = document.createElement('p');
+        same.className = 'same';
+        same.textContent = t('inspectSame', 'No differences in the checked properties.');
+        inspectCard.appendChild(same);
+      } else {
+        const table = document.createElement('table');
+        const head = document.createElement('tr');
+        for (const text of [t('inspectProperty', 'Property'), sideName(mySide), sideName(otherSide)]) {
+          const th = document.createElement('th');
+          th.textContent = text;
+          head.appendChild(th);
+        }
+        table.appendChild(head);
+        for (const prop of rows.slice(0, 14)) {
+          const tr = document.createElement('tr');
+          const name = document.createElement('td');
+          name.textContent = prop;
+          tr.append(name, valueCell(inspectLocal.styles[prop]), valueCell(result.styles?.[prop]));
+          table.appendChild(tr);
+        }
+        inspectCard.appendChild(table);
+      }
+    }
+    const hint = document.createElement('p');
+    hint.className = 'hint';
+    hint.textContent = t(inspectFrozen ? 'inspectHintFrozen' : 'inspectHint', '');
+    inspectCard.appendChild(hint);
+    placeInspectCard();
+  }
+
+  function placeInspectCard() {
+    if (!inspectCard) return;
+    inspectCard.style.display = 'block';
+    const vw = window.innerWidth || 0;
+    const vh = window.innerHeight || 0;
+    const width = Math.min(300, vw - 16);
+    inspectCard.style.width = `${width}px`;
+    const height = inspectCard.offsetHeight || 160;
+    let left = inspectPoint.x + 16;
+    let top = inspectPoint.y + 18;
+    if (left + width > vw - 8) left = Math.max(8, inspectPoint.x - width - 16);
+    if (top + height > vh - 8) top = Math.max(8, inspectPoint.y - height - 18);
+    inspectCard.style.left = `${left}px`;
+    inspectCard.style.top = `${top}px`;
+  }
+
+  function flushInspect() {
+    inspectPending = false;
+    if (!inspectOn() || !inspectEl || inspectFrozen) return;
+    inspectSeq += 1;
+    inspectLocal = { label: elementLabel(inspectEl), styles: readInspectStyles(inspectEl), box: readBox(inspectEl) };
+    placeBox(inspectBox, inspectTag, inspectEl, `${inspectLocal.label} · ${inspectLocal.box.w} × ${inspectLocal.box.h}`);
+    renderInspectCard(null);
+    const point = getEventCoordinates({ clientX: inspectPoint.x, clientY: inspectPoint.y });
+    sendRuntimeMessage({
+      type: MSG.INSPECT_HOVER,
+      probe: { ...buildElementDescriptor(inspectEl), ...point, seq: inspectSeq }
+    });
+  }
+
+  function handleInspectMove(event) {
+    if (!inspectOn() || !event.isTrusted || inspectFrozen) return;
+    if (isInsideExtensionUi(event) || isInsideRulerUi(event)) return;
+    const element = event.target instanceof Element ? event.target : null;
+    if (!element || isOurHost(element) || element === document.documentElement) return;
+    if (!ensureInspectLayer()) return;
+    inspectPoint = { x: Number(event.clientX) || 0, y: Number(event.clientY) || 0 };
+    if (element === inspectEl) {
+      placeInspectCard();
+      return;
+    }
+    inspectEl = element;
+    if (inspectPending) return;
+    inspectPending = true;
+    requestAnimationFrame(flushInspect);
+  }
+
+  // While inspecting, a click freezes or unfreezes the selection and does
+  // not reach the page (or click mirroring).
+  function handleInspectClick(event) {
+    if (!inspectOn() || !event.isTrusted) return;
+    if (isInsideExtensionUi(event) || isInsideRulerUi(event)) return;
+    if (event.type === 'click') {
+      inspectFrozen = !inspectFrozen;
+      if (inspectLocal) renderInspectCard(inspectLastResult);
+    }
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }
+
+  function handleInspectKey(event) {
+    if (!inspectOn() || !event.isTrusted || event.key !== 'Escape') return;
+    event.preventDefault();
+    event.stopPropagation();
+    sendRuntimeMessage({ type: MSG.COMMAND, command: CMD.INSPECT_SET, value: false, userGesture: true });
+  }
+
+  let inspectLastResult = null;
+
+  function applyInspectResult(result) {
+    if (!inspectOn() || !result || result.seq !== inspectSeq) return;
+    inspectLastResult = result;
+    renderInspectCard(result);
+  }
+
+  // The other pane: outline the element matching the probe and answer with
+  // its style values.
+  function answerRemoteInspect(probe) {
+    if (!inspectOn() || !probe) return { ok: true, found: false };
+    const candidates = Array.isArray(probe.candidates) ? probe.candidates : [];
+    const element = firstDescriptorMatch(candidates, true) || resolveHoverTarget(probe);
+    if (!(element instanceof Element) || isOurHost(element)) {
+      clearPeerInspect();
+      return { ok: true, found: false };
+    }
+    inspectPeerEl = element;
+    if (ensureInspectLayer()) {
+      const box = readBox(element);
+      placeBox(inspectPeerBox, inspectPeerTag, element, `${elementLabel(element)} · ${box.w} × ${box.h}`);
+    }
+    return { ok: true, found: true, styles: readInspectStyles(element), box: readBox(element), label: elementLabel(element) };
+  }
+
+  function clearPeerInspect() {
+    inspectPeerEl = null;
+    if (inspectPeerBox) inspectPeerBox.style.display = 'none';
+  }
+
+  function reconcileInspect() {
+    if (!inspectOn()) {
+      inspectLastResult = null;
+      teardownInspect();
+    }
+  }
+
+  function refreshInspectBoxes() {
+    if (!inspectHost) return;
+    if (inspectEl && inspectLocal) placeBox(inspectBox, inspectTag, inspectEl, inspectTag.textContent);
+    if (inspectPeerEl) placeBox(inspectPeerBox, inspectPeerTag, inspectPeerEl, inspectPeerTag.textContent);
+  }
+
+  function handleInspectLeave() {
+    if (!inspectOn() || inspectFrozen) return;
+    inspectEl = null;
+    inspectLocal = null;
+    if (inspectBox) inspectBox.style.display = 'none';
+    if (inspectCard) inspectCard.style.display = 'none';
+    sendRuntimeMessage({ type: MSG.INSPECT_CLEAR });
+  }
+
   async function requestSplitStatus() {
     const response = await sendRuntimeMessage({ type: MSG.GET_SPLIT_STATUS, timestamp: Date.now() });
 
@@ -3739,6 +4112,23 @@
       rulers = [];
       renderRulers();
       updateUi();
+      sendResponse({ ok: true });
+      return false;
+    }
+
+    if (message.type === MSG.REMOTE_INSPECT) {
+      sendResponse(isForThisOrigin(message) ? answerRemoteInspect(message.probe) : { ok: false });
+      return false;
+    }
+
+    if (message.type === MSG.INSPECT_RESULT) {
+      if (isForThisOrigin(message)) applyInspectResult(message.result);
+      sendResponse({ ok: true });
+      return false;
+    }
+
+    if (message.type === MSG.REMOTE_INSPECT_CLEAR) {
+      clearPeerInspect();
       sendResponse({ ok: true });
       return false;
     }
@@ -3880,6 +4270,16 @@
 
   window.addEventListener('scroll', handleLocalScroll, { passive: true });
   window.addEventListener('scroll', scheduleOverlayPosition, { passive: true });
+  window.addEventListener('scroll', refreshInspectBoxes, { passive: true, capture: true });
+  // Registered on window in the capture phase, so they run before the
+  // page's and the click-mirroring listeners while inspecting.
+  window.addEventListener('pointermove', handleInspectMove, true);
+  window.addEventListener('click', handleInspectClick, true);
+  window.addEventListener('mousedown', handleInspectClick, true);
+  window.addEventListener('pointerdown', handleInspectClick, true);
+  window.addEventListener('mouseup', handleInspectClick, true);
+  window.addEventListener('keydown', handleInspectKey, true);
+  document.addEventListener('mouseleave', handleInspectLeave, true);
   document.addEventListener('scroll', handleContainerScroll, { capture: true, passive: true });
   window.addEventListener('wheel', trackAltFromPointer, { capture: true, passive: true });
   document.addEventListener('pointermove', trackAltFromPointer, { capture: true, passive: true });

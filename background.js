@@ -94,6 +94,12 @@ const MSG = Object.freeze({
   VIEWPORT: 'SVSS_VIEWPORT',
   GET_VIEWPORT: 'SVSS_GET_VIEWPORT',
   POPUP_SET_PANE_WIDTH: 'SVSS_POPUP_SET_PANE_WIDTH',
+  POPUP_INSPECT_SET: 'SVSS_POPUP_INSPECT_SET',
+  INSPECT_HOVER: 'SVSS_INSPECT_HOVER',
+  REMOTE_INSPECT: 'SVSS_REMOTE_INSPECT',
+  INSPECT_RESULT: 'SVSS_INSPECT_RESULT',
+  INSPECT_CLEAR: 'SVSS_INSPECT_CLEAR',
+  REMOTE_INSPECT_CLEAR: 'SVSS_REMOTE_INSPECT_CLEAR',
   POPUP_OVERLAY_SET: 'SVSS_POPUP_OVERLAY_SET',
   POPUP_OVERLAY_REFRESH: 'SVSS_POPUP_OVERLAY_REFRESH',
   OVERLAY_IMAGE: 'SVSS_OVERLAY_IMAGE',
@@ -139,7 +145,8 @@ const CMD = Object.freeze({
   CHECKLIST_GO: 'CHECKLIST_GO',
   CHECKLIST_MARK: 'CHECKLIST_MARK',
   OVERLAY_SET: 'OVERLAY_SET',
-  OVERLAY_REFRESH: 'OVERLAY_REFRESH'
+  OVERLAY_REFRESH: 'OVERLAY_REFRESH',
+  INSPECT_SET: 'INSPECT_SET'
 });
 
 // Panel commands that set one of EXTRA_BOOL_OPTIONS / CHOICE_OPTIONS.
@@ -195,6 +202,7 @@ const GESTURE_REQUIRED_COMMANDS = new Set([
   CMD.CHECKLIST_MARK,
   CMD.OVERLAY_SET,
   CMD.OVERLAY_REFRESH,
+  CMD.INSPECT_SET,
   ...Object.keys(OPTION_COMMANDS)
 ]);
 
@@ -487,6 +495,7 @@ async function pauseForOriginChange(group) {
   group.enabled = false;
   group.pauseReason = PAUSE_ORIGIN_CHANGED;
   if (group.overlay) group.overlay.on = false;
+  group.inspect = false;
   group.isReloadingTabs = {};
   group.navigationLocks = {};
   group.error = null;
@@ -689,6 +698,7 @@ function buildUiStateForTab(group, tabId, show = true) {
     paneSizes: paneSizesFor(group),
     checklist: checklistSummary(group),
     overlay: overlaySummaryFor(group, tabId),
+    inspect: Boolean(enabled && group.inspect),
     color,
     statusText,
     reloading,
@@ -1074,6 +1084,88 @@ async function handlePopupOverlayMessage(message) {
   if (message.type === MSG.POPUP_OVERLAY_REFRESH) scheduleOverlayCapture(group, 0);
   else result = await setOverlay(group, message.overlay, activeTab.id);
   return { ...result, status: await getPopupStatus() };
+}
+
+// ---- Inspect differences (CSS of the element under the cursor) ----------------
+// While the mode is on, hovering an element in one pane sends its descriptor
+// and a curated list of computed style values to the other pane, which finds
+// the matching element, highlights it and answers with its own values. The
+// pane with the mouse shows the properties that differ. Only style values and
+// box sizes of the two matched elements are exchanged, only while the mode
+// is on and both panes are on their pinned origins. Nothing is stored.
+const INSPECT_PROPS = Object.freeze([
+  'display', 'position', 'box-sizing', 'margin', 'padding', 'border-width', 'border-radius',
+  'font-family', 'font-size', 'font-weight', 'font-style', 'line-height', 'letter-spacing',
+  'text-align', 'text-transform', 'text-decoration-line', 'color', 'background-color',
+  'opacity', 'box-shadow', 'gap', 'flex-direction', 'justify-content', 'align-items', 'z-index'
+]);
+
+function sanitizeStyles(raw) {
+  const src = plainObjectOr(raw);
+  const out = {};
+  for (const prop of INSPECT_PROPS) {
+    if (typeof src[prop] === 'string') out[prop] = src[prop].slice(0, 200);
+  }
+  return out;
+}
+
+function sanitizeBox(raw) {
+  const b = plainObjectOr(raw);
+  return { w: Math.round(clampNumber(b.w, 0, 100000) * 10) / 10, h: Math.round(clampNumber(b.h, 0, 1000000) * 10) / 10 };
+}
+
+async function setInspect(group, value) {
+  group.inspect = Boolean(value) && Boolean(group.enabled);
+  scheduleSaveState();
+  await sendGroupState(group);
+  return { ok: group.inspect === Boolean(value) };
+}
+
+async function handleInspectHoverMessage(sender, message) {
+  const tabId = sender.tab?.id;
+  const windowId = sender.tab?.windowId;
+  if (typeof tabId !== 'number' || typeof windowId !== 'number') return;
+  const group = await getGroupForTab(tabId, windowId);
+  if (!group || !group.enabled || !group.inspect) return;
+  if (!(await isPairOnPinnedOrigins(group, tabId, sender.url))) return;
+  const targetTabId = getPeerTabId(group, tabId);
+  if (!targetTabId) return;
+
+  const raw = plainObjectOr(message.probe);
+  const seq = Math.round(clampNumber(raw.seq, 0, Number.MAX_SAFE_INTEGER));
+  const reply = await safeSendMessage(targetTabId, {
+    type: MSG.REMOTE_INSPECT,
+    targetOrigin: pinnedOriginFor(group, targetTabId),
+    probe: {
+      ...sanitizeDescriptor(raw),
+      clientX: clampNumber(raw.clientX, -10000, 100000),
+      clientY: clampNumber(raw.clientY, -10000, 100000),
+      vw: clampNumber(raw.vw, 0, 100000),
+      vh: clampNumber(raw.vh, 0, 100000)
+    }
+  });
+  const found = Boolean(reply?.ok && reply.found);
+  await safeSendMessage(tabId, {
+    type: MSG.INSPECT_RESULT,
+    targetOrigin: pinnedOriginFor(group, tabId),
+    result: {
+      seq,
+      found,
+      styles: found ? sanitizeStyles(reply.styles) : {},
+      box: found ? sanitizeBox(reply.box) : null,
+      label: found && typeof reply.label === 'string' ? reply.label.slice(0, 120) : ''
+    }
+  });
+}
+
+async function handleInspectClearMessage(sender) {
+  const tabId = sender.tab?.id;
+  const windowId = sender.tab?.windowId;
+  if (typeof tabId !== 'number' || typeof windowId !== 'number') return;
+  const group = await getGroupForTab(tabId, windowId);
+  if (!group) return;
+  const targetTabId = getPeerTabId(group, tabId);
+  if (targetTabId) await safeSendMessage(targetTabId, { type: MSG.REMOTE_INSPECT_CLEAR });
 }
 
 // ---- History of pairs ---------------------------------------------------------
@@ -1906,6 +1998,7 @@ async function stopCurrentSplitView(tabId, windowId) {
   group.error = null;
   group.isReloadingTabs = {};
   if (group.overlay) group.overlay.on = false;
+  group.inspect = false;
   await saveStateNow();
   await sendGroupState(group);
 }
@@ -1916,6 +2009,7 @@ async function stopAllSplitViews() {
   for (const group of Object.values(state.groups)) {
     group.enabled = false;
     if (group.overlay) group.overlay.on = false;
+  group.inspect = false;
     group.pauseReason = null;
     group.error = null;
     group.isReloadingTabs = {};
@@ -2687,6 +2781,12 @@ async function handleUiCommand(sender, command, message = {}) {
     case CMD.SET_HOVER_MIRRORING:
       await setGroupBooleanOption(tabId, windowId, 'mirrorHover', Boolean(message.value));
       break;
+    case CMD.INSPECT_SET: {
+      await scanWindow(windowId);
+      const group = await getGroupForTab(tabId, windowId);
+      if (group) await setInspect(group, Boolean(message.value));
+      break;
+    }
     case CMD.OVERLAY_SET:
     case CMD.OVERLAY_REFRESH:
       await handleOverlayCommand(tabId, windowId, command, message);
@@ -2729,6 +2829,7 @@ function summarizeGroupForPopup(group) {
     hideWpAdminBar: Boolean(group.hideWpAdminBar),
     paneSizes: paneSizesFor(group),
     overlay: overlaySummaryFor(group, null),
+    inspect: Boolean(group.enabled && group.inspect),
     rulerCount: Array.isArray(group.rulers) ? group.rulers.length : 0
   };
 }
@@ -2941,6 +3042,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === MSG.VIEWPORT) {
       await handleViewportMessage(sender, message);
       sendResponse({ ok: true });
+      return;
+    }
+
+    if (message.type === MSG.INSPECT_HOVER) {
+      await handleInspectHoverMessage(sender, message);
+      sendResponse({ ok: true });
+      return;
+    }
+
+    if (message.type === MSG.INSPECT_CLEAR) {
+      await handleInspectClearMessage(sender);
+      sendResponse({ ok: true });
+      return;
+    }
+
+    if (message.type === MSG.POPUP_INSPECT_SET) {
+      const { group } = await activeGroup();
+      const result = group ? await setInspect(group, Boolean(message.value)) : { ok: false };
+      sendResponse({ ...result, status: await getPopupStatus() });
       return;
     }
 
@@ -3166,6 +3286,12 @@ chrome.commands.onCommand.addListener((command) => {
       case 'hard-reload-active-pane':
         await reloadPane(activeTab.id, activeTab.windowId, 'active', true);
         break;
+      case 'toggle-inspect': {
+        await scanWindow(activeTab.windowId);
+        const group = await getGroupForTab(activeTab.id, activeTab.windowId);
+        if (group) await setInspect(group, !group.inspect);
+        break;
+      }
       default:
         debug('Unknown command', command);
     }

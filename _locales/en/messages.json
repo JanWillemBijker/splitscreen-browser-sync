@@ -605,5 +605,35 @@
   },
   "overlayDeclined": {
     "message": "Without that permission the overlay cannot capture the other pane."
+  },
+  "cmdToggleInspect": {
+    "message": "Inspect CSS differences on or off"
+  },
+  "sectionInspect": {
+    "message": "CSS differences"
+  },
+  "inspectToggle": {
+    "message": "Inspect differences"
+  },
+  "inspectHelp": {
+    "message": "Point at an element on one side: both sides outline it and a panel lists the CSS that differs (font, size, colour, spacing, layout). Click to freeze, Esc to stop."
+  },
+  "inspectNoMatch": {
+    "message": "No matching element on the other side."
+  },
+  "inspectSame": {
+    "message": "No differences in the checked properties."
+  },
+  "inspectProperty": {
+    "message": "Property"
+  },
+  "inspectHint": {
+    "message": "Click to freeze · Esc to stop"
+  },
+  "inspectHintFrozen": {
+    "message": "Frozen · click to continue · Esc to stop"
+  },
+  "inspectNeedSync": {
+    "message": "Start sync to inspect differences."
   }
 }

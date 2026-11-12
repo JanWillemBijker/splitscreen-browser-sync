@@ -77,6 +77,9 @@
         "default": "Alt+Shift+R"
       },
       "description": "__MSG_cmdHardReload__"
+    },
+    "toggle-inspect": {
+      "description": "__MSG_cmdToggleInspect__"
     }
   }
 }

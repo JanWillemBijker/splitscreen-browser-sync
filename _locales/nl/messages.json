@@ -605,5 +605,35 @@
   },
   "overlayDeclined": {
     "message": "Zonder die toestemming kan de overlay de andere helft niet vastleggen."
+  },
+  "cmdToggleInspect": {
+    "message": "CSS-verschillen inspecteren aan of uit"
+  },
+  "sectionInspect": {
+    "message": "CSS-verschillen"
+  },
+  "inspectToggle": {
+    "message": "Verschillen inspecteren"
+  },
+  "inspectHelp": {
+    "message": "Wijs een element aan op één kant: beide kanten omlijnen het en een paneel toont welke CSS verschilt (lettertype, grootte, kleur, ruimte, opmaak). Klik om vast te zetten, Esc om te stoppen."
+  },
+  "inspectNoMatch": {
+    "message": "Geen overeenkomend element aan de andere kant."
+  },
+  "inspectSame": {
+    "message": "Geen verschillen in de gecontroleerde eigenschappen."
+  },
+  "inspectProperty": {
+    "message": "Eigenschap"
+  },
+  "inspectHint": {
+    "message": "Klik om vast te zetten · Esc om te stoppen"
+  },
+  "inspectHintFrozen": {
+    "message": "Vastgezet · klik om verder te gaan · Esc om te stoppen"
+  },
+  "inspectNeedSync": {
+    "message": "Start de sync om verschillen te inspecteren."
   }
 }

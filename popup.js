@@ -9,6 +9,7 @@ const MSG = Object.freeze({
   POPUP_SET_GROUP_OPTION: 'SVSS_POPUP_SET_GROUP_OPTION',
   POPUP_SET_GROUP_CHOICE: 'SVSS_POPUP_SET_GROUP_CHOICE',
   POPUP_SET_PANE_WIDTH: 'SVSS_POPUP_SET_PANE_WIDTH',
+  POPUP_INSPECT_SET: 'SVSS_POPUP_INSPECT_SET',
   POPUP_OVERLAY_SET: 'SVSS_POPUP_OVERLAY_SET',
   POPUP_OVERLAY_REFRESH: 'SVSS_POPUP_OVERLAY_REFRESH',
   POPUP_HISTORY_GET: 'SVSS_POPUP_HISTORY_GET',
@@ -221,6 +222,9 @@ function renderStatus(status) {
   renderPaneSizes(group.paneSizes || {});
   if (inSplit && currentTab() === 'checklist') loadChecklist();
   renderOverlay(group);
+  $('inspectOn').checked = Boolean(group.inspect);
+  $('inspectOn').disabled = !group.enabled;
+  $('inspectNeedSync').hidden = Boolean(group.enabled) || !inSplit;
 
   showCurrent.disabled = !inSplit;
   addRuler.disabled = !inSplit;
@@ -363,6 +367,10 @@ async function setOverlay(patch) {
   $('overlayResult').textContent = response && response.ok === false && response.reason === 'permission' ? t('overlayDeclined') : '';
   return response;
 }
+
+$('inspectOn').addEventListener('change', () => {
+  run({ type: MSG.POPUP_INSPECT_SET, value: $('inspectOn').checked });
+});
 
 $('allowCapture').addEventListener('click', async () => {
   let granted = false;
