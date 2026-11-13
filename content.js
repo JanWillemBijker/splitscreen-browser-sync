@@ -6,7 +6,53 @@
   // script is orphaned and must not block the freshly injected one.
   const previousInstance = window.__SVSS_CONTENT_LOADED__;
   if (previousInstance && typeof previousInstance.isAlive === 'function' && previousInstance.isAlive()) return;
-  window.__SVSS_CONTENT_LOADED__ = Object.freeze({ isAlive: () => Boolean(chrome?.runtime?.id) });
+  // The orphaned instance would otherwise keep its page listeners (and e.g.
+  // an "inspect" mode that swallows every click) until the page reloads.
+  if (previousInstance && typeof previousInstance.shutdown === 'function') {
+    try { previousInstance.shutdown(); } catch (_error) { /* old instance */ }
+  }
+  window.__SVSS_CONTENT_LOADED__ = Object.freeze({
+    isAlive: () => Boolean(chrome?.runtime?.id),
+    shutdown: () => shutdownOrphan()
+  });
+
+  // Every window/document listener is tied to this instance's lifetime and
+  // checks that the extension is still there before it does anything.
+  const lifetime = new AbortController();
+  let isShutDown = false;
+
+  function on(target, type, handler, options) {
+    const opts = typeof options === 'boolean' ? { capture: options } : { ...(options || {}) };
+    opts.signal = lifetime.signal;
+    target.addEventListener(type, (event) => {
+      if (isShutDown || !chrome?.runtime?.id) {
+        shutdownOrphan();
+        return;
+      }
+      handler(event);
+    }, opts);
+  }
+
+  // After an extension reload/update: remove everything this instance added
+  // to the page and stop listening. The new instance takes over.
+  function shutdownOrphan() {
+    if (isShutDown) return;
+    isShutDown = true;
+    lifetime.abort();
+    const steps = [
+      () => teardownInspect(),
+      () => teardownOverlay(),
+      () => teardownCursorHost(),
+      () => teardownRulerHost(),
+      () => teardownForceHoverStyle(),
+      () => teardownWpAdminObserver(),
+      () => { if (host) host.remove(); }
+    ];
+    for (const step of steps) {
+      try { step(); } catch (_error) { /* keep going */ }
+    }
+    uiState = { ...uiState, show: false, enabled: false, inspect: false, overlay: null };
+  }
 
   const DEBUG = false;
 
@@ -2216,8 +2262,8 @@
   // tabs.onUpdated (the content script runs in an isolated world, so patching
   // `history` here would never see the page's calls).
   function setupNavigationWatcher() {
-    window.addEventListener('popstate', reportNavigationIfChanged, true);
-    window.addEventListener('hashchange', reportNavigationIfChanged, true);
+    on(window, 'popstate', reportNavigationIfChanged, true);
+    on(window, 'hashchange', reportNavigationIfChanged, true);
   }
 
   function isInsideExtensionUi(event) {
@@ -3297,9 +3343,9 @@
     sendRuntimeMessage({ type: MSG.RULER_DELETE, id });
   }
 
-  window.addEventListener('mousemove', handleRulerMouseMove, true);
-  window.addEventListener('mouseup', handleRulerMouseUp, true);
-  document.addEventListener('keydown', handleRulerKeyDown, true);
+  on(window, 'mousemove', handleRulerMouseMove, true);
+  on(window, 'mouseup', handleRulerMouseUp, true);
+  on(document, 'keydown', handleRulerKeyDown, true);
 
   // ---- Hover mirroring -----------------------------------------------------
 
@@ -4462,7 +4508,7 @@
 
   // Viewport size for the pane-size display; numbers only, after resizing stops.
   let viewportTimer = null;
-  window.addEventListener('resize', () => {
+  on(window, 'resize', () => {
     if (viewportTimer) clearTimeout(viewportTimer);
     viewportTimer = setTimeout(() => {
       viewportTimer = null;
@@ -4673,7 +4719,7 @@
     return false;
   });
 
-  document.addEventListener('pointerdown', (event) => {
+  on(document, 'pointerdown', (event) => {
     if (panelOpen && host && !isInsideExtensionUi(event)) {
       panelOpen = false;
       updatePanelOpenState();
@@ -4683,51 +4729,51 @@
     }
   }, true);
 
-  window.addEventListener('scroll', handleLocalScroll, { passive: true });
-  window.addEventListener('scroll', scheduleOverlayPosition, { passive: true });
-  window.addEventListener('scroll', refreshInspectBoxes, { passive: true, capture: true });
+  on(window, 'scroll', handleLocalScroll, { passive: true });
+  on(window, 'scroll', scheduleOverlayPosition, { passive: true });
+  on(window, 'scroll', refreshInspectBoxes, { passive: true, capture: true });
   // Registered on window in the capture phase, so they run before the
   // page's and the click-mirroring listeners while inspecting.
-  window.addEventListener('pointermove', handleInspectMove, true);
-  window.addEventListener('click', handleInspectClick, true);
-  window.addEventListener('mousedown', handleInspectClick, true);
-  window.addEventListener('pointerdown', handleInspectClick, true);
-  window.addEventListener('mouseup', handleInspectClick, true);
-  window.addEventListener('keydown', handleInspectKey, true);
-  document.addEventListener('mouseleave', handleInspectLeave, true);
-  document.addEventListener('scroll', handleContainerScroll, { capture: true, passive: true });
-  window.addEventListener('wheel', trackAltFromPointer, { capture: true, passive: true });
-  document.addEventListener('pointermove', trackAltFromPointer, { capture: true, passive: true });
-  document.addEventListener('pointerdown', trackAltFromPointer, { capture: true, passive: true });
-  window.addEventListener('keydown', trackAltFromKey, true);
-  window.addEventListener('keyup', trackAltFromKey, true);
-  window.addEventListener('blur', (event) => {
+  on(window, 'pointermove', handleInspectMove, true);
+  on(window, 'click', handleInspectClick, true);
+  on(window, 'mousedown', handleInspectClick, true);
+  on(window, 'pointerdown', handleInspectClick, true);
+  on(window, 'mouseup', handleInspectClick, true);
+  on(window, 'keydown', handleInspectKey, true);
+  on(document, 'mouseleave', handleInspectLeave, true);
+  on(document, 'scroll', handleContainerScroll, { capture: true, passive: true });
+  on(window, 'wheel', trackAltFromPointer, { capture: true, passive: true });
+  on(document, 'pointermove', trackAltFromPointer, { capture: true, passive: true });
+  on(document, 'pointerdown', trackAltFromPointer, { capture: true, passive: true });
+  on(window, 'keydown', trackAltFromKey, true);
+  on(window, 'keyup', trackAltFromKey, true);
+  on(window, 'blur', (event) => {
     if (event.isTrusted) setAltDecoupled(false);
   }, true);
-  document.addEventListener('click', handleLocalClick, true);
-  document.addEventListener('focusin', handleLocalFocusIn, true);
-  document.addEventListener('input', handleLocalFieldEvent, true);
-  document.addEventListener('change', handleLocalFieldEvent, true);
-  document.addEventListener('pointermove', handleLocalPointerMove, true);
-  document.addEventListener('pointermove', handleCursorPointerMove, true);
-  document.addEventListener('pointerdown', handleCursorPointerDown, true);
-  document.addEventListener('pointerleave', handlePointerExit, true);
-  window.addEventListener('blur', handlePointerExit, true);
-  window.addEventListener('mouseout', (event) => {
+  on(document, 'click', handleLocalClick, true);
+  on(document, 'focusin', handleLocalFocusIn, true);
+  on(document, 'input', handleLocalFieldEvent, true);
+  on(document, 'change', handleLocalFieldEvent, true);
+  on(document, 'pointermove', handleLocalPointerMove, true);
+  on(document, 'pointermove', handleCursorPointerMove, true);
+  on(document, 'pointerdown', handleCursorPointerDown, true);
+  on(document, 'pointerleave', handlePointerExit, true);
+  on(window, 'blur', handlePointerExit, true);
+  on(window, 'mouseout', (event) => {
     if (!event.relatedTarget && !event.toElement) handlePointerExit();
   }, true);
-  document.addEventListener('visibilitychange', () => {
+  on(document, 'visibilitychange', () => {
     if (document.hidden) handlePointerExit();
   });
-  window.addEventListener('pagehide', handlePointerExit, true);
+  on(window, 'pagehide', handlePointerExit, true);
 
-  window.addEventListener('pageshow', () => {
+  on(window, 'pageshow', () => {
     requestSplitStatus();
     sendReady();
     reportNavigationIfChanged();
   }, { once: false });
 
-  document.addEventListener('visibilitychange', () => {
+  on(document, 'visibilitychange', () => {
     if (!document.hidden) {
       requestSplitStatus();
       sendReady();
@@ -4742,7 +4788,7 @@
   }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init, { once: true });
+    on(document, 'DOMContentLoaded', init, { once: true });
   } else {
     init();
   }
