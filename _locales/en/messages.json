@@ -164,9 +164,6 @@
   "pillError": {
     "message": "Not responding"
   },
-  "sectionOptions": {
-    "message": "Options"
-  },
   "sectionOffset": {
     "message": "Scroll offset"
   },
@@ -305,11 +302,8 @@
   "paneSizesHelp": {
     "message": "Chrome has no setting for the divider, so a preset resizes the window until the chosen pane has that width. The other pane changes along."
   },
-  "paneSizeUnknown": {
-    "message": "unknown"
-  },
   "presetSideLabel": {
-    "message": "Pane to resize"
+    "message": "Which side?"
   },
   "presetGroupLabel": {
     "message": "Width presets"
@@ -352,14 +346,8 @@
   "tabChecklist": {
     "message": "Checklist"
   },
-  "checklistHelp": {
-    "message": "Paths to check one by one on both sites. Saved for this pair of sites."
-  },
-  "checklistEmpty": {
-    "message": "No pages yet. Paste paths or URLs below, or add the current page."
-  },
   "checklistProgress": {
-    "message": "$DONE$ of $TOTAL$ checked",
+    "message": "$DONE$ of $TOTAL$ pages checked",
     "placeholders": {
       "done": {
         "content": "$1",
@@ -372,7 +360,7 @@
     }
   },
   "checklistFailCount": {
-    "message": "$COUNT$ wrong",
+    "message": "$COUNT$ differ",
     "placeholders": {
       "count": {
         "content": "$1",
@@ -393,9 +381,6 @@
       }
     }
   },
-  "checklistNoCurrent": {
-    "message": "Press Next to open the first page in both panes."
-  },
   "checklistNeedSync": {
     "message": "Start sync once so both sites are known; then Previous/Next opens the pages."
   },
@@ -406,13 +391,13 @@
     "message": "Next"
   },
   "statusOk": {
-    "message": "Good"
+    "message": "Looks right"
   },
   "statusFail": {
-    "message": "Wrong"
+    "message": "Differs"
   },
   "statusNa": {
-    "message": "N/A"
+    "message": "Skipped"
   },
   "statusOpen": {
     "message": "Not checked"
@@ -421,10 +406,10 @@
     "message": "Result for this page"
   },
   "checklistNote": {
-    "message": "Note"
+    "message": "Note (optional)"
   },
   "checklistNotePlaceholder": {
-    "message": "What is different?"
+    "message": "What differs?"
   },
   "checklistPastePlaceholder": {
     "message": "/pricing/\n/contact/\nhttps://example.com/about/"
@@ -436,7 +421,7 @@
     "message": "Add"
   },
   "btnAddCurrent": {
-    "message": "Add current page"
+    "message": "Add the page that is open now"
   },
   "btnExportCsv": {
     "message": "Export CSV"
@@ -479,9 +464,6 @@
         "example": "/pricing/"
       }
     }
-  },
-  "checklistAllPages": {
-    "message": "All pages"
   },
   "csvHeader": {
     "message": "#,Path,Result,Note,Left URL,Right URL"
@@ -554,9 +536,6 @@
   },
   "overlayHelp": {
     "message": "Lays an image of one side over the other side, so differences stand out. The image is refreshed when you stop scrolling."
-  },
-  "overlayPanelHelp": {
-    "message": "An image of the other side, on top of this side."
   },
   "overlayPermissionHelp": {
     "message": "Chrome only lets an extension take a picture of a tab with access to all sites, so the overlay asks for that once. The picture stays inside your browser."
@@ -677,5 +656,144 @@
   },
   "suggestResetDone": {
     "message": "Dismissed pairs will be suggested again."
+  },
+  "quickToolsLabel": {
+    "message": "Compare tools"
+  },
+  "quickWidths": {
+    "message": "Widths"
+  },
+  "quickInspect": {
+    "message": "CSS"
+  },
+  "stateOn": {
+    "message": "On"
+  },
+  "stateOff": {
+    "message": "Off"
+  },
+  "compareNeedSync": {
+    "message": "Start sync to use the overlay and CSS differences."
+  },
+  "presetMobile": {
+    "message": "Mobile"
+  },
+  "presetTablet": {
+    "message": "Tablet"
+  },
+  "presetLaptopSmall": {
+    "message": "Small"
+  },
+  "presetLaptop": {
+    "message": "Laptop"
+  },
+  "presetDesktop": {
+    "message": "Desktop"
+  },
+  "btnRestoreWindow": {
+    "message": "Restore original window size"
+  },
+  "restoreWindowDone": {
+    "message": "The window is back to its original size."
+  },
+  "paneWidthThisSide": {
+    "message": "Width of this side"
+  },
+  "presetLimitedHere": {
+    "message": "Not enough room on the screen: this side is $WIDTH$ px wide.",
+    "placeholders": {
+      "width": {
+        "content": "$1",
+        "example": "1180"
+      }
+    }
+  },
+  "overlayDeferred": {
+    "message": "The overlay image appears once you close this popup (Chrome closes the popup while the other side is captured)."
+  },
+  "sectionSyncOptions": {
+    "message": "Sync options"
+  },
+  "checklistIntro": {
+    "message": "Go through a list of pages on both sites, for example old and new. For each page you note whether it looks right. The list is saved for this pair of sites."
+  },
+  "checklistStep1": {
+    "message": "Add the pages you want to check (below)."
+  },
+  "checklistStep2": {
+    "message": "Press Start: both sides open the first page."
+  },
+  "checklistStep3": {
+    "message": "Choose Looks right, Differs or Skip. The next page opens by itself."
+  },
+  "checklistQuestion": {
+    "message": "Do both sides look right?"
+  },
+  "btnMarkOk": {
+    "message": "Looks right"
+  },
+  "btnMarkFail": {
+    "message": "Differs"
+  },
+  "btnMarkSkip": {
+    "message": "Skip"
+  },
+  "checklistMarkHint": {
+    "message": "Looks right and Skip open the next page. With Differs you can add a note first."
+  },
+  "checklistAddTitle": {
+    "message": "Add pages"
+  },
+  "checklistPasteToggle": {
+    "message": "Paste several paths or URLs"
+  },
+  "btnChecklistStart": {
+    "message": "Start checking"
+  },
+  "btnChecklistStartCount": {
+    "message": "Start: open page 1 of $COUNT$",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "12"
+      }
+    }
+  },
+  "btnChecklistContinue": {
+    "message": "Continue with the next page"
+  },
+  "btnChecklistRestart": {
+    "message": "Start again from page 1"
+  },
+  "checklistDoneAll": {
+    "message": "Done: all $COUNT$ pages look right.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "12"
+      }
+    }
+  },
+  "checklistDoneFails": {
+    "message": "Done: $COUNT$ pages checked, $FAILS$ differ. Export the list below.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "12"
+      },
+      "fails": {
+        "content": "$2",
+        "example": "2"
+      }
+    }
+  },
+  "checklistAllPagesCount": {
+    "message": "Pages ($COUNT$)",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "12"
+      }
+    }
   }
 }

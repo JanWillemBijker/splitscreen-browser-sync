@@ -44,13 +44,32 @@
       </div>
 
       <button id="syncToggle" type="button" class="btn btn-primary" hidden></button>
+
+      <!-- Comparing tools at a glance (only while a pair is shown). -->
+      <div class="quick" id="quickTools" role="group" data-i18n-aria="quickToolsLabel" hidden>
+        <button type="button" class="quick-btn" id="quickWidths">
+          <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><rect x="2" y="4" width="11" height="12" rx="1.5"/><rect x="15" y="7" width="3.5" height="9" rx="1"/></svg>
+          <span class="quick-label" data-i18n="quickWidths"></span>
+          <span class="quick-state" id="quickWidthsState"></span>
+        </button>
+        <button type="button" class="quick-btn" id="quickOverlay" aria-pressed="false">
+          <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><rect x="2" y="2.5" width="11" height="11" rx="1.5"/><rect x="7" y="6.5" width="11" height="11" rx="1.5"/></svg>
+          <span class="quick-label" data-i18n="sectionOverlay"></span>
+          <span class="quick-state" id="quickOverlayState"></span>
+        </button>
+        <button type="button" class="quick-btn" id="quickInspect" aria-pressed="false" data-i18n-title="sectionInspect">
+          <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M7 5L3 10l4 5M13 5l4 5-4 5"/></svg>
+          <span class="quick-label" data-i18n="quickInspect"></span>
+          <span class="quick-state" id="quickInspectState"></span>
+        </button>
+      </div>
       <button id="suggestionNever" type="button" class="link-button suggest-never" data-i18n="suggestNever" hidden></button>
     </section>
 
     <div class="tabs" role="tablist" data-i18n-aria="tabsLabel">
       <button type="button" class="tab" role="tab" id="tab-sync" aria-controls="panel-sync" data-tab="sync" data-i18n="tabSync"></button>
-      <button type="button" class="tab" role="tab" id="tab-checklist" aria-controls="panel-checklist" data-tab="checklist" data-i18n="tabChecklist"></button>
       <button type="button" class="tab" role="tab" id="tab-compare" aria-controls="panel-compare" data-tab="compare" data-i18n="tabCompare"></button>
+      <button type="button" class="tab" role="tab" id="tab-checklist" aria-controls="panel-checklist" data-tab="checklist" data-i18n="tabChecklist"></button>
       <button type="button" class="tab" role="tab" id="tab-settings" aria-controls="panel-settings" data-tab="settings" data-i18n="tabSettings"></button>
     </div>
 
@@ -164,51 +183,73 @@
 
         <div class="group" id="checklistGroup" data-needs-pair>
           <div class="group-head">
-            <p class="group-help" data-i18n="checklistHelp"></p>
+            <p class="group-help" data-i18n="checklistIntro"></p>
             <p class="origins" id="checklistOrigins"></p>
           </div>
+
+          <ol class="steps steps-tight" id="checklistSteps">
+            <li data-i18n="checklistStep1"></li>
+            <li data-i18n="checklistStep2"></li>
+            <li data-i18n="checklistStep3"></li>
+          </ol>
 
           <div class="progress" id="checklistProgressWrap" hidden>
             <div class="progress-text"><span id="checklistProgress"></span><span id="checklistFails" class="fails"></span></div>
             <div class="progress-bar" role="progressbar" id="checklistBar" aria-valuemin="0"><span id="checklistBarFill"></span></div>
           </div>
 
+          <p class="done-line" id="checklistDone" role="status" hidden></p>
+          <p class="empty-hint" id="checklistHint" hidden></p>
+
           <div class="current" id="checklistCurrent" hidden>
             <div class="current-head">
-              <span class="current-pos" id="checklistPos"></span>
-              <div class="nav-buttons">
-                <button type="button" class="btn btn-secondary btn-small" id="checklistPrev" data-i18n="btnPrev"></button>
-                <button type="button" class="btn btn-primary btn-small" id="checklistNext" data-i18n="btnNext"></button>
+              <button type="button" class="nav-arrow" id="checklistPrev" data-i18n-aria="btnPrev" data-i18n-title="btnPrev">
+                <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M10 3.5L5.5 8l4.5 4.5"/></svg>
+              </button>
+              <div class="current-mid">
+                <span class="current-pos" id="checklistPos"></span>
+                <p class="current-path" id="checklistPath"></p>
               </div>
+              <button type="button" class="nav-arrow" id="checklistNext" data-i18n-aria="btnNext" data-i18n-title="btnNext">
+                <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M6 3.5L10.5 8 6 12.5"/></svg>
+              </button>
             </div>
-            <p class="current-path" id="checklistPath"></p>
-            <p class="empty-hint" id="checklistHint"></p>
+            <p class="current-question" data-i18n="checklistQuestion"></p>
             <div class="status-buttons" role="group" data-i18n-aria="checklistStatusLabel" id="checklistStatus">
-              <button type="button" class="chip chip-ok" data-status="ok" aria-pressed="false" data-i18n="statusOk"></button>
-              <button type="button" class="chip chip-fail" data-status="fail" aria-pressed="false" data-i18n="statusFail"></button>
-              <button type="button" class="chip chip-na" data-status="na" aria-pressed="false" data-i18n="statusNa"></button>
+              <button type="button" class="chip chip-ok" data-status="ok" aria-pressed="false"><span aria-hidden="true">✓ </span><span data-i18n="btnMarkOk"></span></button>
+              <button type="button" class="chip chip-fail" data-status="fail" aria-pressed="false"><span aria-hidden="true">✗ </span><span data-i18n="btnMarkFail"></span></button>
+              <button type="button" class="chip chip-na" data-status="na" aria-pressed="false"><span data-i18n="btnMarkSkip"></span></button>
             </div>
-            <label class="field">
+            <p class="current-tip" data-i18n="checklistMarkHint"></p>
+            <label class="field field-note" id="checklistNoteWrap">
               <span class="field-label" data-i18n="checklistNote"></span>
               <textarea id="checklistNote" rows="2" maxlength="1000" data-i18n-placeholder="checklistNotePlaceholder"></textarea>
             </label>
           </div>
 
-          <p class="empty-hint" id="checklistEmpty" data-i18n="checklistEmpty"></p>
+          <button type="button" class="btn btn-primary btn-wide" id="checklistStart" hidden></button>
 
-          <details class="list-details" id="checklistListWrap" hidden>
-            <summary class="group-summary"><span class="group-title" data-i18n="checklistAllPages"></span><svg class="chevron" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M6 4l4 4-4 4"/></svg></summary>
+          <div class="list-block" id="checklistListWrap" hidden>
+            <h3 class="list-title" id="checklistListTitle"></h3>
             <ol class="check-list" id="checklistList"></ol>
-          </details>
-
-          <label class="field">
-            <span class="field-label" data-i18n="checklistPasteLabel"></span>
-            <textarea id="checklistPaste" rows="3" data-i18n-placeholder="checklistPastePlaceholder"></textarea>
-          </label>
-          <div class="row-buttons">
-            <button type="button" class="btn btn-secondary btn-small" id="checklistAdd" data-i18n="btnAddPaths"></button>
-            <button type="button" class="btn btn-secondary btn-small" id="checklistAddCurrent" data-i18n="btnAddCurrent"></button>
           </div>
+
+          <div class="add-block">
+            <h3 class="list-title" data-i18n="checklistAddTitle"></h3>
+            <button type="button" class="btn btn-secondary btn-small btn-wide" id="checklistAddCurrent">
+              <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M2 8h12M8 2v12" /></svg>
+              <span data-i18n="btnAddCurrent"></span>
+            </button>
+            <details class="paste" id="checklistPasteWrap">
+              <summary class="paste-summary"><span data-i18n="checklistPasteToggle"></span><svg class="chevron" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M6 4l4 4-4 4"/></svg></summary>
+              <label class="field">
+                <span class="field-label" data-i18n="checklistPasteLabel"></span>
+                <textarea id="checklistPaste" rows="4" data-i18n-placeholder="checklistPastePlaceholder"></textarea>
+              </label>
+              <button type="button" class="btn btn-secondary btn-small" id="checklistAdd" data-i18n="btnAddPaths"></button>
+            </details>
+          </div>
+
           <div class="row-buttons row-export" id="checklistExport" hidden>
             <button type="button" class="btn btn-secondary btn-small" id="checklistCsv" data-i18n="btnExportCsv"></button>
             <button type="button" class="btn btn-secondary btn-small" id="checklistCopy" data-i18n="btnCopyText"></button>
@@ -225,24 +266,24 @@
         <div class="group" id="sizesGroup" data-needs-pair>
           <div class="group-head">
             <h2 class="group-title" data-i18n="sectionPaneSizes"></h2>
-            <p class="group-help" data-i18n="paneSizesHelp"></p>
           </div>
-          <dl class="sizes">
-            <div class="size"><dt data-i18n="colLeft"></dt><dd id="sizeLeft">–</dd></div>
-            <div class="size"><dt data-i18n="colRight"></dt><dd id="sizeRight">–</dd></div>
-          </dl>
-          <div class="segmented" role="radiogroup" data-i18n-aria="presetSideLabel">
-            <label class="segment"><input type="radio" name="presetSide" value="left" checked><span data-i18n="colLeft"></span></label>
-            <label class="segment"><input type="radio" name="presetSide" value="right"><span data-i18n="colRight"></span></label>
+          <div class="preset-side">
+            <span class="field-label" id="presetSideTitle" data-i18n="presetSideLabel"></span>
+            <div class="segmented" role="radiogroup" aria-labelledby="presetSideTitle">
+              <label class="segment"><input type="radio" name="presetSide" value="left" checked><span><span data-i18n="colLeft"></span> <span class="segment-meta" id="sizeLeft"></span></span></label>
+              <label class="segment"><input type="radio" name="presetSide" value="right"><span><span data-i18n="colRight"></span> <span class="segment-meta" id="sizeRight"></span></span></label>
+            </div>
           </div>
           <div class="presets" role="group" data-i18n-aria="presetGroupLabel">
-            <button type="button" class="btn btn-secondary btn-small" data-preset="375">375</button>
-            <button type="button" class="btn btn-secondary btn-small" data-preset="768">768</button>
-            <button type="button" class="btn btn-secondary btn-small" data-preset="1024">1024</button>
-            <button type="button" class="btn btn-secondary btn-small" data-preset="1280">1280</button>
-            <button type="button" class="btn btn-secondary btn-small" data-preset="1440">1440</button>
+            <button type="button" class="preset" data-preset="375" aria-pressed="false"><span class="preset-num">375</span><span class="preset-name" data-i18n="presetMobile"></span></button>
+            <button type="button" class="preset" data-preset="768" aria-pressed="false"><span class="preset-num">768</span><span class="preset-name" data-i18n="presetTablet"></span></button>
+            <button type="button" class="preset" data-preset="1024" aria-pressed="false"><span class="preset-num">1024</span><span class="preset-name" data-i18n="presetLaptopSmall"></span></button>
+            <button type="button" class="preset" data-preset="1280" aria-pressed="false"><span class="preset-num">1280</span><span class="preset-name" data-i18n="presetLaptop"></span></button>
+            <button type="button" class="preset" data-preset="1440" aria-pressed="false"><span class="preset-num">1440</span><span class="preset-name" data-i18n="presetDesktop"></span></button>
           </div>
+          <button type="button" class="link-button restore-window" id="restoreWindow" data-i18n="btnRestoreWindow" hidden></button>
           <p class="result-line" id="presetResult" role="status" aria-live="polite"></p>
+          <p class="group-help" data-i18n="paneSizesHelp"></p>
         </div>
 
         <div class="group" id="inspectGroup" data-needs-pair>

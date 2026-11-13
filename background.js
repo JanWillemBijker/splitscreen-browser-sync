@@ -93,7 +93,9 @@ const MSG = Object.freeze({
   FIELD_INPUT: 'SVSS_FIELD_INPUT',
   VIEWPORT: 'SVSS_VIEWPORT',
   GET_VIEWPORT: 'SVSS_GET_VIEWPORT',
+  PANE_WIDTH_RESULT: 'SVSS_PANE_WIDTH_RESULT',
   POPUP_SET_PANE_WIDTH: 'SVSS_POPUP_SET_PANE_WIDTH',
+  POPUP_RESTORE_WINDOW: 'SVSS_POPUP_RESTORE_WINDOW',
   POPUP_INSPECT_SET: 'SVSS_POPUP_INSPECT_SET',
   INSPECT_HOVER: 'SVSS_INSPECT_HOVER',
   REMOTE_INSPECT: 'SVSS_REMOTE_INSPECT',
@@ -151,7 +153,9 @@ const CMD = Object.freeze({
   OVERLAY_SET: 'OVERLAY_SET',
   OVERLAY_REFRESH: 'OVERLAY_REFRESH',
   INSPECT_SET: 'INSPECT_SET',
-  SUGGEST_DISMISS: 'SUGGEST_DISMISS'
+  SUGGEST_DISMISS: 'SUGGEST_DISMISS',
+  PANE_WIDTH: 'PANE_WIDTH',
+  PANE_WIDTH_RESTORE: 'PANE_WIDTH_RESTORE'
 });
 
 // Panel commands that set one of EXTRA_BOOL_OPTIONS / CHOICE_OPTIONS.
@@ -209,6 +213,8 @@ const GESTURE_REQUIRED_COMMANDS = new Set([
   CMD.OVERLAY_REFRESH,
   CMD.INSPECT_SET,
   CMD.SUGGEST_DISMISS,
+  CMD.PANE_WIDTH,
+  CMD.PANE_WIDTH_RESTORE,
   ...Object.keys(OPTION_COMMANDS)
 ]);
 
@@ -703,6 +709,7 @@ function buildUiStateForTab(group, tabId, show = true, suggestion = null) {
     wpAdminBarHidden: enabled && Boolean(group.hideWpAdminBar),
     rulers: Array.isArray(group.rulers) ? group.rulers : [],
     paneSizes: paneSizesFor(group),
+    canRestoreWindow: Boolean(group.windowRestore),
     checklist: checklistSummary(group),
     overlay: overlaySummaryFor(group, tabId),
     inspect: Boolean(enabled && group.inspect),
@@ -1159,6 +1166,19 @@ let capturePermission = false;
 let lastCaptureAt = 0;
 const captureTimers = new Map();
 const captureRunning = new Set();
+const POPUP_OPEN_RETRY_MS = 700;
+
+// Activating another tab closes the toolbar popup, so a capture that has to
+// switch panes waits until the popup is closed.
+async function isActionPopupOpen() {
+  try {
+    if (!chrome.runtime.getContexts) return false;
+    const contexts = await chrome.runtime.getContexts({ contextTypes: ['POPUP'] });
+    return contexts.length > 0;
+  } catch (_error) {
+    return false;
+  }
+}
 
 async function refreshCapturePermission() {
   try {
@@ -1281,6 +1301,10 @@ async function captureOverlay(groupKey) {
         return;
       }
     }
+    if (active.id !== sourceTabId && await isActionPopupOpen()) {
+      scheduleOverlayCapture(group, POPUP_OPEN_RETRY_MS);
+      return;
+    }
     uiHidden = true;
     await Promise.race([safeSendMessage(sourceTabId, { type: MSG.CAPTURE_HIDE_UI }), sleepMs(300)]);
     if (active && active.id !== sourceTabId) {
@@ -1340,9 +1364,14 @@ async function handlePopupOverlayMessage(message) {
   const { activeTab, group } = await activeGroup();
   if (!group) return { ok: false, reason: 'no-pair', status: await getPopupStatus() };
   let result = { ok: true };
+  // From the popup the overlay goes over the other pane by default: the
+  // active pane is then the one captured, which needs no tab switch, so the
+  // popup stays open.
   if (message.type === MSG.POPUP_OVERLAY_REFRESH) scheduleOverlayCapture(group, 0);
-  else result = await setOverlay(group, message.overlay, activeTab.id);
-  return { ...result, status: await getPopupStatus() };
+  else result = await setOverlay(group, message.overlay, getPeerTabId(group, activeTab.id) || activeTab.id);
+  const o = overlayOf(group);
+  const deferred = o.on && o.targetTabId === activeTab.id;
+  return { ...result, deferred, status: await getPopupStatus() };
 }
 
 // ---- Inspect differences (CSS of the element under the cursor) ----------------
@@ -1720,6 +1749,18 @@ function checklistFor(group, create = false) {
   return checklistsCache[key] || null;
 }
 
+// The next page still to check after `from` (wrapping around), or -1 when
+// every page has a result.
+function nextOpenChecklistIndex(list, from) {
+  const count = list.items.length;
+  for (let step = 1; step <= count; step += 1) {
+    const i = (from + step + count) % count;
+    if (from >= 0 && i === from) continue;
+    if (!list.items[i].status) return i;
+  }
+  return -1;
+}
+
 function checklistSummary(group) {
   const list = checklistFor(group);
   if (!list || !list.items.length) return null;
@@ -1728,6 +1769,7 @@ function checklistSummary(group) {
     count: list.items.length,
     index: list.index,
     done: list.items.filter((item) => item.status).length,
+    fails: list.items.filter((item) => item.status === 'fail').length,
     path: current ? current.path : null,
     status: current ? current.status : null,
     canNavigate: Boolean(group.originsPinned && group.pinnedLeftOrigin && group.pinnedRightOrigin)
@@ -1832,6 +1874,7 @@ async function checklistResponse(group, extra = {}) {
     rightOrigin: group ? (group.pinnedRightOrigin || group.rightOrigin || null) : null,
     items: list ? list.items : [],
     index: list ? list.index : -1,
+    nextOpen: list && list.items.length ? nextOpenChecklistIndex(list, list.index) : -1,
     ...extra
   };
 }
@@ -1867,6 +1910,11 @@ async function handlePopupChecklistMessage(message) {
     list.updatedAt = Date.now();
     scheduleSaveChecklists();
     await sendGroupState(group);
+    // "Looks right" / "Skip" go straight on to the next page still to check.
+    if (message.advance === true && item.status && index === list.index) {
+      const next = nextOpenChecklistIndex(list, index);
+      if (next >= 0) return checklistResponse(group, { navigation: await goToChecklistItem(group, next) });
+    }
   } else if (message.type === MSG.POPUP_CHECKLIST_REMOVE && Number.isInteger(index) && list.items[index]
     && (typeof message.path !== 'string' || list.items[index].path === message.path)) {
     list.items.splice(index, 1);
@@ -1880,7 +1928,8 @@ async function handlePopupChecklistMessage(message) {
     scheduleSaveChecklists();
     await sendGroupState(group);
   } else if (message.type === MSG.POPUP_CHECKLIST_GO) {
-    const target = Number.isInteger(index) ? index : list.index + (Number(message.step) < 0 ? -1 : 1);
+    let target = Number.isInteger(index) ? index : list.index + (Number(message.step) < 0 ? -1 : 1);
+    if (message.firstOpen === true) target = Math.max(0, nextOpenChecklistIndex(list, -1));
     const result = await goToChecklistItem(group, Math.max(0, Math.min(list.items.length - 1, target)));
     return checklistResponse(group, { navigation: result });
   }
@@ -1895,7 +1944,9 @@ async function handleChecklistCommand(tabId, windowId, command, message) {
   const list = group ? checklistFor(group) : null;
   if (!list || !list.items.length) return;
   if (command === CMD.CHECKLIST_GO) {
-    const target = list.index + (Number(message.step) < 0 ? -1 : 1);
+    const target = message.firstOpen === true
+      ? Math.max(0, nextOpenChecklistIndex(list, -1))
+      : list.index + (Number(message.step) < 0 ? -1 : 1);
     if (target < 0 || target >= list.items.length) return;
     await goToChecklistItem(group, target);
     return;
@@ -1908,6 +1959,10 @@ async function handleChecklistCommand(tabId, windowId, command, message) {
     list.updatedAt = Date.now();
     scheduleSaveChecklists();
     await sendGroupState(group);
+    if (message.advance === true && item.status) {
+      const next = nextOpenChecklistIndex(list, list.index);
+      if (next >= 0) await goToChecklistItem(group, next);
+    }
   }
 }
 
@@ -1980,6 +2035,10 @@ const sleepMs = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 async function resizePaneTo(group, tabId, targetWidth) {
   const target = Math.round(clampNumber(targetWidth, MIN_PANE_WIDTH, MAX_PANE_WIDTH));
   let win = await chrome.windows.get(group.windowId);
+  // Remember the window as it was before the first preset, for "Restore".
+  if (!group.windowRestore) {
+    group.windowRestore = { left: win.left, top: win.top, width: win.width, height: win.height, state: win.state };
+  }
   if (win.state !== 'normal') {
     await chrome.windows.update(win.id, { state: 'normal' });
     await sleepMs(300);
@@ -2022,6 +2081,40 @@ async function resizePaneTo(group, tabId, targetWidth) {
   scheduleSaveState();
   await sendGroupState(group);
   return { width: paneWidth, reached: Math.abs(paneWidth - target) <= 1, limited };
+}
+
+// Puts the window back to its size and place before the first width preset.
+async function restoreWindowFor(group) {
+  const saved = plainObjectOr(group?.windowRestore);
+  if (!group || !Number.isFinite(saved.width)) return { ok: false };
+  try {
+    const win = await chrome.windows.get(group.windowId);
+    if (win.state !== 'normal') await chrome.windows.update(win.id, { state: 'normal' });
+    const bounds = {};
+    for (const key of ['left', 'top', 'width', 'height']) {
+      if (Number.isFinite(saved[key])) bounds[key] = Math.round(saved[key]);
+    }
+    await chrome.windows.update(win.id, bounds);
+    if (saved.state === 'maximized' || saved.state === 'fullscreen') {
+      await chrome.windows.update(win.id, { state: saved.state });
+    }
+  } catch (error) {
+    debug('window restore failed', error?.message || error);
+    return { ok: false };
+  }
+  delete group.windowRestore;
+  await sleepMs(300);
+  for (const tabId of [group.leftTabId, group.rightTabId]) {
+    const reading = await readViewport(tabId);
+    if (reading?.size) storeViewport(group, tabId, reading.size);
+  }
+  scheduleSaveState();
+  await sendGroupState(group);
+  return { ok: true };
+}
+
+function isAllowedPaneWidth(width) {
+  return PANE_PRESETS.includes(width) || (Number.isInteger(width) && width >= MIN_PANE_WIDTH && width <= MAX_PANE_WIDTH);
 }
 
 async function setPaneWidthForActiveSplit(side, width) {
@@ -3089,6 +3182,25 @@ async function handleUiCommand(sender, command, message = {}) {
     case CMD.SET_SHOW_CURSOR:
       await setGroupBooleanOption(tabId, windowId, 'showCursor', Boolean(message.value));
       break;
+    case CMD.PANE_WIDTH: {
+      const width = Number(message.width);
+      if (!isAllowedPaneWidth(width)) break;
+      await scanWindow(windowId);
+      const group = await getGroupForTab(tabId, windowId);
+      if (!group) break;
+      try {
+        const result = await resizePaneTo(group, tabId, width);
+        if (!result.reached) safeSendMessage(tabId, { type: MSG.PANE_WIDTH_RESULT, result });
+      } catch (error) {
+        debug('pane resize failed', error?.message || error);
+      }
+      break;
+    }
+    case CMD.PANE_WIDTH_RESTORE: {
+      await scanWindow(windowId);
+      await restoreWindowFor(await getGroupForTab(tabId, windowId));
+      break;
+    }
     case CMD.SUGGEST_DISMISS: {
       await scanWindow(windowId);
       await dismissSuggestion(await getGroupForTab(tabId, windowId), message.forever === true);
@@ -3124,6 +3236,7 @@ function summarizeGroupForPopup(group) {
     ...extraOptionValues(group),
     hideWpAdminBar: Boolean(group.hideWpAdminBar),
     paneSizes: paneSizesFor(group),
+    canRestoreWindow: Boolean(group.windowRestore),
     overlay: overlaySummaryFor(group, null),
     inspect: Boolean(group.enabled && group.inspect),
     rulerCount: Array.isArray(group.rulers) ? group.rulers.length : 0
@@ -3170,6 +3283,7 @@ async function getPopupStatus() {
     buttonShownForCurrent,
     manualButtonOverride,
     group: summarizeGroupForPopup(group),
+    activeSide: group ? getSide(group, activeTab.id) : null,
     suggestion: group ? await suggestionFor(group) : null
   };
 }
@@ -3378,11 +3492,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     if (message.type === MSG.POPUP_SET_PANE_WIDTH) {
       const width = Number(message.width);
-      if (!PANE_PRESETS.includes(width) && !(Number.isInteger(width) && width >= MIN_PANE_WIDTH && width <= MAX_PANE_WIDTH)) {
+      if (!isAllowedPaneWidth(width)) {
         sendResponse({ ok: false });
         return;
       }
       const result = await setPaneWidthForActiveSplit(message.side === 'right' ? 'right' : 'left', width);
+      sendResponse({ ...result, status: await getPopupStatus() });
+      return;
+    }
+
+    if (message.type === MSG.POPUP_RESTORE_WINDOW) {
+      const { group } = await activeGroup();
+      const result = group ? await restoreWindowFor(group) : { ok: false };
       sendResponse({ ...result, status: await getPopupStatus() });
       return;
     }

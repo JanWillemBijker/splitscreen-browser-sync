@@ -164,9 +164,6 @@
   "pillError": {
     "message": "No responde"
   },
-  "sectionOptions": {
-    "message": "Opciones"
-  },
   "sectionOffset": {
     "message": "Desfase"
   },
@@ -305,11 +302,8 @@
   "paneSizesHelp": {
     "message": "Chrome no permite ajustar el divisor, así que un ajuste predefinido cambia el tamaño de la ventana hasta que el panel elegido tenga ese ancho. El otro panel cambia también."
   },
-  "paneSizeUnknown": {
-    "message": "desconocido"
-  },
   "presetSideLabel": {
-    "message": "Panel que ajustar"
+    "message": "¿Qué panel?"
   },
   "presetGroupLabel": {
     "message": "Anchos predefinidos"
@@ -352,14 +346,8 @@
   "tabChecklist": {
     "message": "Checklist"
   },
-  "checklistHelp": {
-    "message": "Rutas para revisar una a una en ambos sitios. Se guardan para este par de sitios."
-  },
-  "checklistEmpty": {
-    "message": "Aún no hay páginas. Pega rutas o URLs abajo, o añade la página actual."
-  },
   "checklistProgress": {
-    "message": "$DONE$ de $TOTAL$ revisadas",
+    "message": "$DONE$ de $TOTAL$ páginas revisadas",
     "placeholders": {
       "done": {
         "content": "$1",
@@ -372,7 +360,7 @@
     }
   },
   "checklistFailCount": {
-    "message": "$COUNT$ mal",
+    "message": "$COUNT$ difieren",
     "placeholders": {
       "count": {
         "content": "$1",
@@ -393,9 +381,6 @@
       }
     }
   },
-  "checklistNoCurrent": {
-    "message": "Haz clic en Siguiente para abrir la primera página en ambos paneles."
-  },
   "checklistNeedSync": {
     "message": "Sincroniza una vez para que se conozcan ambos sitios; luego Anterior/Siguiente abrirá las páginas."
   },
@@ -406,13 +391,13 @@
     "message": "Siguiente"
   },
   "statusOk": {
-    "message": "Bien"
+    "message": "Correcto"
   },
   "statusFail": {
-    "message": "Mal"
+    "message": "Difiere"
   },
   "statusNa": {
-    "message": "N/A"
+    "message": "Omitida"
   },
   "statusOpen": {
     "message": "Sin revisar"
@@ -421,10 +406,10 @@
     "message": "Resultado de esta página"
   },
   "checklistNote": {
-    "message": "Nota"
+    "message": "Nota (opcional)"
   },
   "checklistNotePlaceholder": {
-    "message": "¿Qué es diferente?"
+    "message": "¿Qué difiere?"
   },
   "checklistPastePlaceholder": {
     "message": "/precios/\n/contacto/\nhttps://example.com/acerca-de/"
@@ -436,7 +421,7 @@
     "message": "Añadir"
   },
   "btnAddCurrent": {
-    "message": "Añadir página actual"
+    "message": "Añadir la página abierta ahora"
   },
   "btnExportCsv": {
     "message": "Exportar CSV"
@@ -479,9 +464,6 @@
         "example": "/pricing/"
       }
     }
-  },
-  "checklistAllPages": {
-    "message": "Todas las páginas"
   },
   "csvHeader": {
     "message": "#,Ruta,Resultado,Nota,URL izquierda,URL derecha"
@@ -554,9 +536,6 @@
   },
   "overlayHelp": {
     "message": "Coloca una imagen de un lado sobre el otro para que las diferencias destaquen. La imagen se actualiza cuando dejas de desplazarte."
-  },
-  "overlayPanelHelp": {
-    "message": "Una imagen del otro lado, encima de este lado."
   },
   "overlayPermissionHelp": {
     "message": "Chrome solo deja que una extensión capture una pestaña si tiene acceso a todos los sitios, así que la superposición lo pide una vez. La imagen no sale de tu navegador."
@@ -677,5 +656,144 @@
   },
   "suggestResetDone": {
     "message": "Los pares descartados se volverán a sugerir."
+  },
+  "quickToolsLabel": {
+    "message": "Herramientas de comparación"
+  },
+  "quickWidths": {
+    "message": "Anchos"
+  },
+  "quickInspect": {
+    "message": "CSS"
+  },
+  "stateOn": {
+    "message": "Activado"
+  },
+  "stateOff": {
+    "message": "Desactivado"
+  },
+  "compareNeedSync": {
+    "message": "Inicia la sincronización para usar la superposición y las diferencias CSS."
+  },
+  "presetMobile": {
+    "message": "Móvil"
+  },
+  "presetTablet": {
+    "message": "Tableta"
+  },
+  "presetLaptopSmall": {
+    "message": "Pequeño"
+  },
+  "presetLaptop": {
+    "message": "Portátil"
+  },
+  "presetDesktop": {
+    "message": "Escritorio"
+  },
+  "btnRestoreWindow": {
+    "message": "Restaurar el tamaño original de la ventana"
+  },
+  "restoreWindowDone": {
+    "message": "La ventana ha vuelto a su tamaño original."
+  },
+  "paneWidthThisSide": {
+    "message": "Ancho de este panel"
+  },
+  "presetLimitedHere": {
+    "message": "No hay espacio suficiente en la pantalla: este panel mide $WIDTH$ px de ancho.",
+    "placeholders": {
+      "width": {
+        "content": "$1",
+        "example": "1180"
+      }
+    }
+  },
+  "overlayDeferred": {
+    "message": "La superposición aparece al cerrar esta ventana (Chrome la cierra mientras captura el otro panel)."
+  },
+  "sectionSyncOptions": {
+    "message": "Opciones de sincronización"
+  },
+  "checklistIntro": {
+    "message": "Recorre una lista de páginas en ambos sitios, por ejemplo el antiguo y el nuevo. En cada página indicas si está bien. La lista se guarda para este par de sitios."
+  },
+  "checklistStep1": {
+    "message": "Añade las páginas que quieres revisar (abajo)."
+  },
+  "checklistStep2": {
+    "message": "Pulsa Empezar: ambos paneles abren la primera página."
+  },
+  "checklistStep3": {
+    "message": "Elige Correcto, Difiere u Omitir. La siguiente página se abre sola."
+  },
+  "checklistQuestion": {
+    "message": "¿Está bien esta página en ambos lados?"
+  },
+  "btnMarkOk": {
+    "message": "Correcto"
+  },
+  "btnMarkFail": {
+    "message": "Difiere"
+  },
+  "btnMarkSkip": {
+    "message": "Omitir"
+  },
+  "checklistMarkHint": {
+    "message": "Correcto y Omitir abren la página siguiente. Con Difiere puedes escribir antes una nota."
+  },
+  "checklistAddTitle": {
+    "message": "Añadir páginas"
+  },
+  "checklistPasteToggle": {
+    "message": "Pegar varias rutas o URL"
+  },
+  "btnChecklistStart": {
+    "message": "Empezar revisión"
+  },
+  "btnChecklistStartCount": {
+    "message": "Empezar: abrir la página 1 de $COUNT$",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "12"
+      }
+    }
+  },
+  "btnChecklistContinue": {
+    "message": "Seguir con la página siguiente"
+  },
+  "btnChecklistRestart": {
+    "message": "Empezar de nuevo en la página 1"
+  },
+  "checklistDoneAll": {
+    "message": "Listo: las $COUNT$ páginas están bien.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "12"
+      }
+    }
+  },
+  "checklistDoneFails": {
+    "message": "Listo: $COUNT$ páginas revisadas, $FAILS$ difieren. Exporta la lista abajo.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "12"
+      },
+      "fails": {
+        "content": "$2",
+        "example": "2"
+      }
+    }
+  },
+  "checklistAllPagesCount": {
+    "message": "Páginas ($COUNT$)",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "12"
+      }
+    }
   }
 }

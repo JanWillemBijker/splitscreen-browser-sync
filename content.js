@@ -55,6 +55,7 @@
     CAPTURE_READY: 'SVSS_CAPTURE_READY',
     CAPTURE_RESTORE_UI: 'SVSS_CAPTURE_RESTORE_UI',
     GET_VIEWPORT: 'SVSS_GET_VIEWPORT',
+    PANE_WIDTH_RESULT: 'SVSS_PANE_WIDTH_RESULT',
     REMOTE_FIELD_INPUT: 'SVSS_REMOTE_FIELD_INPUT'
   });
 
@@ -86,7 +87,9 @@
     OVERLAY_SET: 'OVERLAY_SET',
     OVERLAY_REFRESH: 'OVERLAY_REFRESH',
     INSPECT_SET: 'INSPECT_SET',
-    SUGGEST_DISMISS: 'SUGGEST_DISMISS'
+    SUGGEST_DISMISS: 'SUGGEST_DISMISS',
+    PANE_WIDTH: 'PANE_WIDTH',
+    PANE_WIDTH_RESTORE: 'PANE_WIDTH_RESTORE'
   });
 
   const HOST_ID = 'svss-root';
@@ -372,7 +375,7 @@
 
     .svss-range { flex: none; width: 120px; accent-color: var(--switch-on); }
 
-    .svss-chip { border-radius: 999px; min-height: 28px; font-size: 12px; padding: 4px 8px; }
+    .svss-chip { border-radius: 999px; min-height: 32px; font-size: 12px; padding: 4px 8px; }
     .svss-chip-ok[aria-pressed="true"] { background: var(--ok-bg); color: var(--ok-ink); border-color: var(--switch-on); }
     .svss-chip-fail[aria-pressed="true"] { background: var(--fail-bg); color: var(--fail-ink); border-color: var(--fail-ink); }
     .svss-chip-na[aria-pressed="true"] { background: var(--idle-bg); color: var(--ink); border-color: var(--muted); }
@@ -414,6 +417,81 @@
     }
 
     .svss-btn-quiet:hover { background: var(--surface-2); color: var(--ink); border-color: transparent; }
+
+    .svss-compare .svss-section-title { margin-bottom: 8px; }
+    .svss-subhead {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin: 0 0 6px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .svss-subhead-meta { color: var(--muted); font-weight: 500; font-variant-numeric: tabular-nums; }
+    .svss-presets {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 4px;
+    }
+    .svss-preset {
+      appearance: none;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1px;
+      min-width: 0;
+      padding: 6px 2px 5px;
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--ink);
+      cursor: pointer;
+      font: inherit;
+      transition: background-color 150ms ease, border-color 150ms ease;
+    }
+    .svss-preset:hover { border-color: var(--muted); }
+    .svss-preset[aria-pressed="true"] { background: var(--ok-bg); color: var(--ok-ink); border-color: var(--switch-on); }
+    .svss-preset[aria-busy="true"] { opacity: 0.6; cursor: progress; }
+    .svss-preset-num { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
+    .svss-preset-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; color: var(--muted); line-height: 1.2; }
+    .svss-preset[aria-pressed="true"] .svss-preset-name { color: inherit; }
+    .svss-restore { margin-top: 6px; min-height: 30px; font-size: 12px; }
+    .svss-tools { margin-top: 10px; }
+    .svss-subhead-gap { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); }
+    .svss-overlay { margin: 0; }
+    .svss-more > .svss-summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 0;
+      cursor: pointer;
+      list-style: none;
+    }
+    .svss-more > .svss-summary::-webkit-details-marker { display: none; }
+    .svss-more > .svss-summary::after {
+      content: '';
+      width: 7px;
+      height: 7px;
+      margin-right: 4px;
+      border-right: 1.6px solid var(--muted);
+      border-bottom: 1.6px solid var(--muted);
+      transform: rotate(-45deg);
+      transition: transform 150ms ease;
+    }
+    .svss-more[open] > .svss-summary { margin-bottom: 6px; }
+    .svss-more[open] > .svss-summary::after { transform: rotate(45deg); }
+    .svss-check-progress { margin-bottom: 8px; font-variant-numeric: tabular-nums; }
+    .svss-check-head {
+      display: grid;
+      grid-template-columns: 30px minmax(0, 1fr) 30px;
+      align-items: center;
+      gap: 4px;
+    }
+    .svss-check-arrow { min-height: 30px; padding: 0; font-size: 18px; line-height: 1; }
+    .svss-check-current { display: flex; flex-direction: column; align-items: center; min-width: 0; text-align: center; }
+    .svss-check-pos { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .svss-check-path { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 650; }
+    .svss-check-question { margin: 8px 0 0; font-size: 12px; text-align: center; }
 
     .svss-toggle {
       display: flex;
@@ -1023,12 +1101,17 @@
   }
 
   // Overlay controls for this pane: show the other pane on top of this one.
-  function createOverlaySection() {
+  function createOverlayControls() {
     const o = uiState.overlay || {};
-    const section = createSection(t('sectionOverlay', 'Overlay'), t('overlayPanelHelp', ''));
+    const section = document.createElement('div');
+    section.className = 'svss-overlay';
+    const head = document.createElement('div');
+    head.className = 'svss-subhead svss-subhead-gap';
+    head.textContent = t('sectionOverlay', 'Overlay');
+    section.appendChild(head);
     if (!o.permission) {
       const hint = document.createElement('p');
-      hint.className = 'svss-help';
+      hint.className = 'svss-help svss-help-after';
       hint.textContent = t('overlayNeedPermission', '');
       section.appendChild(hint);
       return section;
@@ -1072,39 +1155,173 @@
     return section;
   }
 
-  // Compact checklist: position, previous/next and the result of this page.
+  // Checklist: one page at a time. "Looks right" and "Skip" mark the page and
+  // open the next one still to check; "Differs" marks it and stays, so a note
+  // can be written in the popup.
   function createChecklistSection(info) {
     const section = createSection(t('sectionChecklist', 'Checklist'));
-    const line = document.createElement('p');
-    line.className = 'svss-help svss-check-line';
-    const hasCurrent = info.index >= 0 && info.path;
-    line.textContent = hasCurrent
-      ? `${tWith('checklistPosition', [String(info.index + 1), String(info.count)])} · ${info.path}`
-      : (info.canNavigate ? t('checklistNoCurrent', '') : t('checklistNeedSync', ''));
-    section.appendChild(line);
+    section.classList.add('svss-check');
+    const count = Number(info.count) || 0;
+    const done = Number(info.done) || 0;
+    const fails = Number(info.fails) || 0;
 
-    const nav = document.createElement('div');
-    nav.className = 'svss-check-row';
-    const prev = createButton(t('btnPrev', 'Previous'), CMD.CHECKLIST_GO, '', () => ({ step: -1 }), { key: 'check-prev' });
-    const next = createButton(t('btnNext', 'Next'), CMD.CHECKLIST_GO, 'svss-btn-primary', () => ({ step: 1 }), { key: 'check-next' });
-    prev.disabled = !info.canNavigate || info.index <= 0;
-    next.disabled = !info.canNavigate || info.index >= info.count - 1;
-    nav.appendChild(prev);
-    nav.appendChild(next);
-    section.appendChild(nav);
+    const progress = document.createElement('p');
+    progress.className = 'svss-help svss-check-progress';
+    progress.textContent = tWith('checklistProgress', [String(done), String(count)], `${done}/${count}`)
+      + (fails ? ` · ${tWith('checklistFailCount', [String(fails)], String(fails))}` : '');
+    section.appendChild(progress);
 
-    if (hasCurrent) {
-      const chips = document.createElement('div');
-      chips.className = 'svss-check-row svss-chips';
-      chips.setAttribute('role', 'group');
-      chips.setAttribute('aria-label', t('checklistStatusLabel', ''));
-      for (const [status, key] of [['ok', 'statusOk'], ['fail', 'statusFail'], ['na', 'statusNa']]) {
-        const chip = createButton(t(key, status), CMD.CHECKLIST_MARK, `svss-chip svss-chip-${status}`, () => ({ status }), { key: `check-${status}` });
-        chip.setAttribute('aria-pressed', info.status === status ? 'true' : 'false');
-        chips.appendChild(chip);
-      }
-      section.appendChild(chips);
+    if (!info.canNavigate) {
+      const hint = document.createElement('p');
+      hint.className = 'svss-help';
+      hint.textContent = t('checklistNeedSync', '');
+      section.appendChild(hint);
+      return section;
     }
+
+    const hasCurrent = info.index >= 0 && info.path;
+    if (!hasCurrent) {
+      section.appendChild(createButton(
+        done >= count ? t('btnChecklistRestart', 'Start again') : t('btnChecklistStart', 'Start checking'),
+        CMD.CHECKLIST_GO, 'svss-btn-primary svss-btn-block', () => ({ firstOpen: true }), { key: 'check-start' }
+      ));
+      return section;
+    }
+
+    const current = document.createElement('div');
+    current.className = 'svss-check-current';
+    const pos = document.createElement('span');
+    pos.className = 'svss-check-pos';
+    pos.textContent = tWith('checklistPosition', [String(info.index + 1), String(count)]);
+    const path = document.createElement('span');
+    path.className = 'svss-check-path';
+    path.textContent = info.path;
+    path.title = info.path;
+    current.append(pos, path);
+
+    const prev = createButton('‹', CMD.CHECKLIST_GO, 'svss-btn-quiet svss-check-arrow', () => ({ step: -1 }), {
+      key: 'check-prev', ariaLabel: t('btnPrev', 'Previous')
+    });
+    const next = createButton('›', CMD.CHECKLIST_GO, 'svss-btn-quiet svss-check-arrow', () => ({ step: 1 }), {
+      key: 'check-next', ariaLabel: t('btnNext', 'Next')
+    });
+    prev.title = t('btnPrev', 'Previous');
+    next.title = t('btnNext', 'Next');
+    prev.disabled = info.index <= 0;
+    next.disabled = info.index >= count - 1;
+    const head = document.createElement('div');
+    head.className = 'svss-check-head';
+    head.append(prev, current, next);
+    section.appendChild(head);
+
+    const question = document.createElement('p');
+    question.className = 'svss-check-question';
+    question.textContent = t('checklistQuestion', 'Do both sides look right?');
+    section.appendChild(question);
+
+    const chips = document.createElement('div');
+    chips.className = 'svss-check-row svss-chips';
+    chips.setAttribute('role', 'group');
+    chips.setAttribute('aria-label', t('checklistStatusLabel', ''));
+    for (const [status, key, advance] of [['ok', 'btnMarkOk', true], ['fail', 'btnMarkFail', false], ['na', 'btnMarkSkip', true]]) {
+      const chip = createButton(t(key, status), CMD.CHECKLIST_MARK, `svss-chip svss-chip-${status}`, () => ({ status, advance }), { key: `check-${status}` });
+      chip.setAttribute('aria-pressed', info.status === status ? 'true' : 'false');
+      chips.appendChild(chip);
+    }
+    section.appendChild(chips);
+    const hint = document.createElement('p');
+    hint.className = 'svss-help svss-help-after';
+    hint.textContent = t('checklistMarkHint', '');
+    if (hint.textContent) section.appendChild(hint);
+    return section;
+  }
+
+  const PANE_PRESET_LIST = [
+    [375, 'presetMobile', 'Mobile'],
+    [768, 'presetTablet', 'Tablet'],
+    [1024, 'presetLaptopSmall', 'Small'],
+    [1280, 'presetLaptop', 'Laptop'],
+    [1440, 'presetDesktop', 'Desktop']
+  ];
+  let panePresetPending = null;
+
+  // Width presets for THIS pane (the window is resized; Chrome has no API for
+  // the Split View divider) and a button to put the window back.
+  function createWidthBlock() {
+    const block = document.createElement('div');
+    block.className = 'svss-widths';
+    const side = uiState.side === 'right' ? 'right' : 'left';
+    const size = uiState.paneSizes?.[side] || null;
+    const head = document.createElement('div');
+    head.className = 'svss-subhead';
+    const label = document.createElement('span');
+    label.textContent = t('paneWidthThisSide', 'Width of this side');
+    const now = document.createElement('span');
+    now.className = 'svss-subhead-meta';
+    now.textContent = size ? `${size.w} × ${size.h}` : '';
+    head.append(label, now);
+    block.appendChild(head);
+
+    const grid = document.createElement('div');
+    grid.className = 'svss-presets';
+    grid.setAttribute('role', 'group');
+    grid.setAttribute('aria-label', t('presetGroupLabel', 'Width presets'));
+    for (const [width, key, fallback] of PANE_PRESET_LIST) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'svss-preset';
+      button.dataset.key = `preset-${width}`;
+      const active = size && Math.abs(size.w - width) <= 1;
+      button.setAttribute('aria-pressed', active ? 'true' : 'false');
+      if (panePresetPending === width) button.setAttribute('aria-busy', 'true');
+      const num = document.createElement('span');
+      num.className = 'svss-preset-num';
+      num.textContent = String(width);
+      const name = document.createElement('span');
+      name.className = 'svss-preset-name';
+      name.textContent = t(key, fallback);
+      button.append(num, name);
+      button.setAttribute('aria-label', `${t(key, fallback)} ${width} px`);
+      button.addEventListener('click', async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!isTrustedUiEvent(event) || panePresetPending) return;
+        panePresetPending = width;
+        button.setAttribute('aria-busy', 'true');
+        try {
+          await sendUiCommand(event, CMD.PANE_WIDTH, { width });
+        } finally {
+          panePresetPending = null;
+          renderPanelContents();
+        }
+      });
+      grid.appendChild(button);
+    }
+    block.appendChild(grid);
+
+    if (uiState.canRestoreWindow) {
+      block.appendChild(createButton(t('btnRestoreWindow', 'Restore window'), CMD.PANE_WIDTH_RESTORE, 'svss-btn-quiet svss-btn-block svss-restore', null, { key: 'restore-window' }));
+    }
+    return block;
+  }
+
+  // The comparing tools first: widths, CSS differences and the overlay.
+  function createCompareSection() {
+    const section = createSection(t('tabCompare', 'Compare'));
+    section.classList.add('svss-compare');
+    section.appendChild(createWidthBlock());
+    if (!uiState.enabled) {
+      const hint = document.createElement('p');
+      hint.className = 'svss-help svss-help-after';
+      hint.textContent = t('compareNeedSync', 'Start sync to use the overlay and CSS differences.');
+      section.appendChild(hint);
+      return section;
+    }
+    const tools = document.createElement('div');
+    tools.className = 'svss-tools';
+    tools.appendChild(createToggle(t('sectionInspect', 'CSS differences'), uiState.inspect, CMD.INSPECT_SET));
+    tools.appendChild(createOverlayControls());
+    section.appendChild(tools);
     return section;
   }
 
@@ -1123,6 +1340,8 @@
     reloading: 'pillReloading',
     error: 'pillError'
   };
+
+  let panelOptionsOpen = false;
 
   function renderPanelContents() {
     if (!panel) return;
@@ -1182,10 +1401,20 @@
     syncRow.appendChild(createButton(t('btnSyncAll', 'Sync all Split Views'), CMD.SYNC_ALL, 'svss-btn-quiet'));
     panel.appendChild(syncRow);
 
+    panel.appendChild(createCompareSection());
+
     const checklistInfo = uiState.checklist;
     if (checklistInfo && checklistInfo.count > 0) panel.appendChild(createChecklistSection(checklistInfo));
 
-    const optionsSection = createSection(t('sectionOptions', 'Options'));
+    const optionsSection = document.createElement('details');
+    optionsSection.className = 'svss-section svss-more';
+    optionsSection.open = panelOptionsOpen;
+    optionsSection.addEventListener('toggle', () => { panelOptionsOpen = optionsSection.open; });
+    const optionsSummary = document.createElement('summary');
+    optionsSummary.className = 'svss-section-title svss-summary';
+    optionsSummary.dataset.key = 'options-summary';
+    optionsSummary.textContent = t('sectionSyncOptions', 'Sync options');
+    optionsSection.appendChild(optionsSummary);
     optionsSection.appendChild(createSelect(t('optAlign', 'Alignment'), uiState.alignMode === 'element' ? 'element' : 'pixel', [
       ['pixel', t('alignPixel', 'Pixel-exact')],
       ['element', t('alignElement', 'On element/content')]
@@ -1200,14 +1429,15 @@
     optionsSection.appendChild(createToggle(t('optWpAdminBar', 'Hide WordPress admin bar'), uiState.hideWpAdminBar, CMD.SET_WP_ADMIN_BAR));
     panel.appendChild(optionsSection);
 
-    if (uiState.enabled) {
-      const inspectSection = createSection(t('sectionInspect', 'CSS differences'));
-      inspectSection.appendChild(createToggle(t('inspectToggle', 'Inspect differences'), uiState.inspect, CMD.INSPECT_SET));
-      panel.appendChild(inspectSection);
-      panel.appendChild(createOverlaySection());
-    }
-
-    const offsetSection = createSection(t('sectionOffset', 'Scroll offset'), t('offsetHelp', ''));
+    const offsetSection = document.createElement('div');
+    offsetSection.className = 'svss-offset';
+    const offsetTitle = document.createElement('div');
+    offsetTitle.className = 'svss-subhead svss-subhead-gap';
+    offsetTitle.textContent = t('sectionOffset', 'Scroll offset');
+    const offsetHelp = document.createElement('p');
+    offsetHelp.className = 'svss-help';
+    offsetHelp.textContent = t('offsetHelp', '');
+    offsetSection.append(offsetTitle, offsetHelp);
     const offsetRow = document.createElement('div');
     offsetRow.className = 'svss-offset-row';
 
@@ -1247,7 +1477,7 @@
     altHint.className = 'svss-help svss-help-after';
     altHint.textContent = t('altHint', '');
     offsetSection.appendChild(altHint);
-    panel.appendChild(offsetSection);
+    optionsSection.appendChild(offsetSection);
 
     const reloadSection = createSection(t('sectionReload', 'Reload'));
     const reloadGrid = document.createElement('div');
@@ -4334,6 +4564,13 @@
 
     if (message.type === MSG.CAPTURE_RESTORE_UI) {
       setOwnUiHiddenForCapture(false);
+      sendResponse({ ok: true });
+      return false;
+    }
+
+    if (message.type === MSG.PANE_WIDTH_RESULT) {
+      const width = Math.round(Number(message.result?.width) || 0);
+      showToast(width ? tWith('presetLimitedHere', [String(width)], `${width} px`) : t('presetFailed', ''));
       sendResponse({ ok: true });
       return false;
     }

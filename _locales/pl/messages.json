@@ -164,9 +164,6 @@
   "pillError": {
     "message": "Brak odpowiedzi"
   },
-  "sectionOptions": {
-    "message": "Opcje"
-  },
   "sectionOffset": {
     "message": "Przesunięcie"
   },
@@ -305,11 +302,8 @@
   "paneSizesHelp": {
     "message": "Chrome nie ma ustawienia linii podziału, więc gotowa szerokość zmienia rozmiar okna, aż wybrany panel ją osiągnie. Drugi panel zmienia się razem z nim."
   },
-  "paneSizeUnknown": {
-    "message": "nieznany"
-  },
   "presetSideLabel": {
-    "message": "Panel do zmiany"
+    "message": "Który panel?"
   },
   "presetGroupLabel": {
     "message": "Gotowe szerokości"
@@ -352,14 +346,8 @@
   "tabChecklist": {
     "message": "Checklista"
   },
-  "checklistHelp": {
-    "message": "Ścieżki do sprawdzenia po kolei w obu witrynach. Zapisane dla tej pary witryn."
-  },
-  "checklistEmpty": {
-    "message": "Brak stron. Wklej poniżej ścieżki lub adresy URL albo dodaj bieżącą stronę."
-  },
   "checklistProgress": {
-    "message": "Sprawdzono: $DONE$ z $TOTAL$",
+    "message": "Sprawdzono: $DONE$ z $TOTAL$ stron",
     "placeholders": {
       "done": {
         "content": "$1",
@@ -372,7 +360,7 @@
     }
   },
   "checklistFailCount": {
-    "message": "Błędy: $COUNT$",
+    "message": "Różnice: $COUNT$",
     "placeholders": {
       "count": {
         "content": "$1",
@@ -393,9 +381,6 @@
       }
     }
   },
-  "checklistNoCurrent": {
-    "message": "Kliknij Dalej, aby otworzyć pierwszą stronę w obu panelach."
-  },
   "checklistNeedSync": {
     "message": "Włącz raz synchronizację, aby obie witryny były znane; potem Wstecz/Dalej otwiera strony."
   },
@@ -406,13 +391,13 @@
     "message": "Dalej"
   },
   "statusOk": {
-    "message": "Dobrze"
+    "message": "Zgadza się"
   },
   "statusFail": {
-    "message": "Błąd"
+    "message": "Różni się"
   },
   "statusNa": {
-    "message": "N/D"
+    "message": "Pominięta"
   },
   "statusOpen": {
     "message": "Niesprawdzone"
@@ -421,7 +406,7 @@
     "message": "Wynik dla tej strony"
   },
   "checklistNote": {
-    "message": "Notatka"
+    "message": "Notatka (opcjonalnie)"
   },
   "checklistNotePlaceholder": {
     "message": "Co się różni?"
@@ -436,7 +421,7 @@
     "message": "Dodaj"
   },
   "btnAddCurrent": {
-    "message": "Dodaj bieżącą stronę"
+    "message": "Dodaj otwartą teraz stronę"
   },
   "btnExportCsv": {
     "message": "Eksportuj CSV"
@@ -479,9 +464,6 @@
         "example": "/pricing/"
       }
     }
-  },
-  "checklistAllPages": {
-    "message": "Wszystkie strony"
   },
   "csvHeader": {
     "message": "#,Ścieżka,Wynik,Notatka,URL lewy,URL prawy"
@@ -554,9 +536,6 @@
   },
   "overlayHelp": {
     "message": "Nakłada obraz jednego panelu na drugi, by różnice były widoczne. Obraz odświeża się, gdy przestajesz przewijać."
-  },
-  "overlayPanelHelp": {
-    "message": "Obraz drugiego panelu nałożony na ten."
   },
   "overlayPermissionHelp": {
     "message": "Chrome pozwala rozszerzeniu zrobić zrzut karty tylko z dostępem do wszystkich witryn, więc nakładka prosi o to raz. Zrzut zostaje w przeglądarce."
@@ -677,5 +656,144 @@
   },
   "suggestResetDone": {
     "message": "Odrzucone pary będą znów proponowane."
+  },
+  "quickToolsLabel": {
+    "message": "Narzędzia porównania"
+  },
+  "quickWidths": {
+    "message": "Szerokości"
+  },
+  "quickInspect": {
+    "message": "CSS"
+  },
+  "stateOn": {
+    "message": "Wł."
+  },
+  "stateOff": {
+    "message": "Wył."
+  },
+  "compareNeedSync": {
+    "message": "Uruchom synchronizację, aby użyć nakładki i różnic CSS."
+  },
+  "presetMobile": {
+    "message": "Telefon"
+  },
+  "presetTablet": {
+    "message": "Tablet"
+  },
+  "presetLaptopSmall": {
+    "message": "Mały"
+  },
+  "presetLaptop": {
+    "message": "Laptop"
+  },
+  "presetDesktop": {
+    "message": "Desktop"
+  },
+  "btnRestoreWindow": {
+    "message": "Przywróć pierwotny rozmiar okna"
+  },
+  "restoreWindowDone": {
+    "message": "Okno ma znów pierwotny rozmiar."
+  },
+  "paneWidthThisSide": {
+    "message": "Szerokość tego panelu"
+  },
+  "presetLimitedHere": {
+    "message": "Za mało miejsca na ekranie: ten panel ma $WIDTH$ px szerokości.",
+    "placeholders": {
+      "width": {
+        "content": "$1",
+        "example": "1180"
+      }
+    }
+  },
+  "overlayDeferred": {
+    "message": "Nakładka pojawi się po zamknięciu tego okienka (Chrome zamyka je podczas przechwytywania drugiego panelu)."
+  },
+  "sectionSyncOptions": {
+    "message": "Opcje synchronizacji"
+  },
+  "checklistIntro": {
+    "message": "Przejdź listę stron w obu witrynach, np. starej i nowej. Dla każdej strony zaznacz, czy jest w porządku. Lista jest zapisywana dla tej pary witryn."
+  },
+  "checklistStep1": {
+    "message": "Dodaj strony do sprawdzenia (poniżej)."
+  },
+  "checklistStep2": {
+    "message": "Kliknij Start: oba panele otworzą pierwszą stronę."
+  },
+  "checklistStep3": {
+    "message": "Wybierz Zgadza się, Różni się lub Pomiń. Następna strona otworzy się sama."
+  },
+  "checklistQuestion": {
+    "message": "Czy ta strona jest w porządku po obu stronach?"
+  },
+  "btnMarkOk": {
+    "message": "Zgadza się"
+  },
+  "btnMarkFail": {
+    "message": "Różni się"
+  },
+  "btnMarkSkip": {
+    "message": "Pomiń"
+  },
+  "checklistMarkHint": {
+    "message": "Zgadza się i Pomiń otwierają następną stronę. Przy Różni się możesz najpierw dodać notatkę."
+  },
+  "checklistAddTitle": {
+    "message": "Dodaj strony"
+  },
+  "checklistPasteToggle": {
+    "message": "Wklej kilka ścieżek lub adresów URL"
+  },
+  "btnChecklistStart": {
+    "message": "Rozpocznij sprawdzanie"
+  },
+  "btnChecklistStartCount": {
+    "message": "Start: otwórz stronę 1 z $COUNT$",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "12"
+      }
+    }
+  },
+  "btnChecklistContinue": {
+    "message": "Kontynuuj od następnej strony"
+  },
+  "btnChecklistRestart": {
+    "message": "Zacznij od nowa od strony 1"
+  },
+  "checklistDoneAll": {
+    "message": "Gotowe: wszystkie strony ($COUNT$) są w porządku.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "12"
+      }
+    }
+  },
+  "checklistDoneFails": {
+    "message": "Gotowe: sprawdzono $COUNT$ stron, różnice: $FAILS$. Wyeksportuj listę poniżej.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "12"
+      },
+      "fails": {
+        "content": "$2",
+        "example": "2"
+      }
+    }
+  },
+  "checklistAllPagesCount": {
+    "message": "Strony ($COUNT$)",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "12"
+      }
+    }
   }
 }

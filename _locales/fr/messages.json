@@ -164,9 +164,6 @@
   "pillError": {
     "message": "Sans réponse"
   },
-  "sectionOptions": {
-    "message": "Options"
-  },
   "sectionOffset": {
     "message": "Décalage de défilement"
   },
@@ -305,11 +302,8 @@
   "paneSizesHelp": {
     "message": "Chrome ne permet pas de régler le séparateur : un préréglage redimensionne donc la fenêtre jusqu’à ce que le volet choisi ait cette largeur. L’autre volet suit."
   },
-  "paneSizeUnknown": {
-    "message": "inconnue"
-  },
   "presetSideLabel": {
-    "message": "Volet à redimensionner"
+    "message": "Quel volet ?"
   },
   "presetGroupLabel": {
     "message": "Largeurs prédéfinies"
@@ -352,14 +346,8 @@
   "tabChecklist": {
     "message": "Checklist"
   },
-  "checklistHelp": {
-    "message": "Chemins à vérifier un par un sur les deux sites. Enregistrés pour cette paire de sites."
-  },
-  "checklistEmpty": {
-    "message": "Aucune page pour l’instant. Collez des chemins ou URL ci-dessous, ou ajoutez la page actuelle."
-  },
   "checklistProgress": {
-    "message": "$DONE$ sur $TOTAL$ vérifiées",
+    "message": "$DONE$ pages sur $TOTAL$ vérifiées",
     "placeholders": {
       "done": {
         "content": "$1",
@@ -372,7 +360,7 @@
     }
   },
   "checklistFailCount": {
-    "message": "$COUNT$ en erreur",
+    "message": "$COUNT$ diffèrent",
     "placeholders": {
       "count": {
         "content": "$1",
@@ -393,9 +381,6 @@
       }
     }
   },
-  "checklistNoCurrent": {
-    "message": "Cliquez sur Suivant pour ouvrir la première page dans les deux volets."
-  },
   "checklistNeedSync": {
     "message": "Lancez une fois la synchro pour que les deux sites soient connus ; Précédent/Suivant ouvrira ensuite les pages."
   },
@@ -406,13 +391,13 @@
     "message": "Suivant"
   },
   "statusOk": {
-    "message": "OK"
+    "message": "Correct"
   },
   "statusFail": {
-    "message": "Erreur"
+    "message": "Diffère"
   },
   "statusNa": {
-    "message": "N/A"
+    "message": "Passée"
   },
   "statusOpen": {
     "message": "À vérifier"
@@ -421,7 +406,7 @@
     "message": "Résultat pour cette page"
   },
   "checklistNote": {
-    "message": "Note"
+    "message": "Note (facultatif)"
   },
   "checklistNotePlaceholder": {
     "message": "Qu’est-ce qui diffère ?"
@@ -436,7 +421,7 @@
     "message": "Ajouter"
   },
   "btnAddCurrent": {
-    "message": "Ajouter la page actuelle"
+    "message": "Ajouter la page ouverte"
   },
   "btnExportCsv": {
     "message": "Exporter en CSV"
@@ -479,9 +464,6 @@
         "example": "/pricing/"
       }
     }
-  },
-  "checklistAllPages": {
-    "message": "Toutes les pages"
   },
   "csvHeader": {
     "message": "#,Chemin,Résultat,Note,URL gauche,URL droite"
@@ -554,9 +536,6 @@
   },
   "overlayHelp": {
     "message": "Superpose une image d’un côté sur l’autre pour faire ressortir les différences. L’image est actualisée dès que vous arrêtez de défiler."
-  },
-  "overlayPanelHelp": {
-    "message": "Une image de l’autre côté, par-dessus ce côté."
   },
   "overlayPermissionHelp": {
     "message": "Chrome n’autorise une extension à capturer un onglet qu’avec l’accès à tous les sites ; la superposition le demande donc une fois. L’image reste dans votre navigateur."
@@ -677,5 +656,144 @@
   },
   "suggestResetDone": {
     "message": "Les paires ignorées seront à nouveau proposées."
+  },
+  "quickToolsLabel": {
+    "message": "Outils de comparaison"
+  },
+  "quickWidths": {
+    "message": "Largeurs"
+  },
+  "quickInspect": {
+    "message": "CSS"
+  },
+  "stateOn": {
+    "message": "Activé"
+  },
+  "stateOff": {
+    "message": "Désactivé"
+  },
+  "compareNeedSync": {
+    "message": "Lancez la synchronisation pour utiliser la superposition et les différences CSS."
+  },
+  "presetMobile": {
+    "message": "Mobile"
+  },
+  "presetTablet": {
+    "message": "Tablette"
+  },
+  "presetLaptopSmall": {
+    "message": "Petit"
+  },
+  "presetLaptop": {
+    "message": "Portable"
+  },
+  "presetDesktop": {
+    "message": "Bureau"
+  },
+  "btnRestoreWindow": {
+    "message": "Rétablir la taille d’origine de la fenêtre"
+  },
+  "restoreWindowDone": {
+    "message": "La fenêtre a retrouvé sa taille d’origine."
+  },
+  "paneWidthThisSide": {
+    "message": "Largeur de ce volet"
+  },
+  "presetLimitedHere": {
+    "message": "Pas assez de place à l’écran : ce volet fait $WIDTH$ px de large.",
+    "placeholders": {
+      "width": {
+        "content": "$1",
+        "example": "1180"
+      }
+    }
+  },
+  "overlayDeferred": {
+    "message": "La superposition apparaît dès que vous fermez cette fenêtre (Chrome la ferme pendant la capture de l’autre volet)."
+  },
+  "sectionSyncOptions": {
+    "message": "Options de synchronisation"
+  },
+  "checklistIntro": {
+    "message": "Parcourez une liste de pages sur les deux sites, par exemple l’ancien et le nouveau. Pour chaque page, indiquez si elle est correcte. La liste est enregistrée pour cette paire de sites."
+  },
+  "checklistStep1": {
+    "message": "Ajoutez les pages à vérifier (ci-dessous)."
+  },
+  "checklistStep2": {
+    "message": "Cliquez sur Démarrer : les deux volets ouvrent la première page."
+  },
+  "checklistStep3": {
+    "message": "Choisissez Correct, Diffère ou Passer. La page suivante s’ouvre toute seule."
+  },
+  "checklistQuestion": {
+    "message": "Cette page est-elle correcte des deux côtés ?"
+  },
+  "btnMarkOk": {
+    "message": "Correct"
+  },
+  "btnMarkFail": {
+    "message": "Diffère"
+  },
+  "btnMarkSkip": {
+    "message": "Passer"
+  },
+  "checklistMarkHint": {
+    "message": "Correct et Passer ouvrent la page suivante. Avec Diffère, vous pouvez d’abord ajouter une note."
+  },
+  "checklistAddTitle": {
+    "message": "Ajouter des pages"
+  },
+  "checklistPasteToggle": {
+    "message": "Coller plusieurs chemins ou URL"
+  },
+  "btnChecklistStart": {
+    "message": "Démarrer la vérification"
+  },
+  "btnChecklistStartCount": {
+    "message": "Démarrer : ouvrir la page 1 sur $COUNT$",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "12"
+      }
+    }
+  },
+  "btnChecklistContinue": {
+    "message": "Continuer avec la page suivante"
+  },
+  "btnChecklistRestart": {
+    "message": "Recommencer à la page 1"
+  },
+  "checklistDoneAll": {
+    "message": "Terminé : les $COUNT$ pages sont correctes.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "12"
+      }
+    }
+  },
+  "checklistDoneFails": {
+    "message": "Terminé : $COUNT$ pages vérifiées, $FAILS$ diffèrent. Exportez la liste ci-dessous.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "12"
+      },
+      "fails": {
+        "content": "$2",
+        "example": "2"
+      }
+    }
+  },
+  "checklistAllPagesCount": {
+    "message": "Pages ($COUNT$)",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "12"
+      }
+    }
   }
 }

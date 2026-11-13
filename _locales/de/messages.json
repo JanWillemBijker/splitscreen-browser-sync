@@ -164,9 +164,6 @@
   "pillError": {
     "message": "Reagiert nicht"
   },
-  "sectionOptions": {
-    "message": "Optionen"
-  },
   "sectionOffset": {
     "message": "Scroll-Versatz"
   },
@@ -305,11 +302,8 @@
   "paneSizesHelp": {
     "message": "Chrome hat keine Einstellung für den Trenner. Eine Vorgabe ändert daher die Fenstergröße, bis die gewählte Hälfte diese Breite hat. Die andere Hälfte ändert sich mit."
   },
-  "paneSizeUnknown": {
-    "message": "unbekannt"
-  },
   "presetSideLabel": {
-    "message": "Anzupassende Hälfte"
+    "message": "Welche Hälfte?"
   },
   "presetGroupLabel": {
     "message": "Breitenvorgaben"
@@ -352,14 +346,8 @@
   "tabChecklist": {
     "message": "Checkliste"
   },
-  "checklistHelp": {
-    "message": "Pfade, die nacheinander auf beiden Sites geprüft werden. Gespeichert für dieses Site-Paar."
-  },
-  "checklistEmpty": {
-    "message": "Noch keine Seiten. Unten Pfade oder URLs einfügen oder die aktuelle Seite hinzufügen."
-  },
   "checklistProgress": {
-    "message": "$DONE$ von $TOTAL$ geprüft",
+    "message": "$DONE$ von $TOTAL$ Seiten geprüft",
     "placeholders": {
       "done": {
         "content": "$1",
@@ -372,7 +360,7 @@
     }
   },
   "checklistFailCount": {
-    "message": "$COUNT$ fehlerhaft",
+    "message": "$COUNT$ weichen ab",
     "placeholders": {
       "count": {
         "content": "$1",
@@ -393,9 +381,6 @@
       }
     }
   },
-  "checklistNoCurrent": {
-    "message": "Auf Weiter klicken, um die erste Seite in beiden Hälften zu öffnen."
-  },
   "checklistNeedSync": {
     "message": "Sync einmal starten, damit beide Sites bekannt sind; dann öffnen Zurück/Weiter die Seiten."
   },
@@ -406,13 +391,13 @@
     "message": "Weiter"
   },
   "statusOk": {
-    "message": "OK"
+    "message": "Stimmt"
   },
   "statusFail": {
-    "message": "Fehler"
+    "message": "Weicht ab"
   },
   "statusNa": {
-    "message": "n. z."
+    "message": "Übersprungen"
   },
   "statusOpen": {
     "message": "Nicht geprüft"
@@ -421,10 +406,10 @@
     "message": "Ergebnis für diese Seite"
   },
   "checklistNote": {
-    "message": "Notiz"
+    "message": "Notiz (optional)"
   },
   "checklistNotePlaceholder": {
-    "message": "Was ist anders?"
+    "message": "Was weicht ab?"
   },
   "checklistPastePlaceholder": {
     "message": "/preise/\n/kontakt/\nhttps://example.com/ueber-uns/"
@@ -436,7 +421,7 @@
     "message": "Hinzufügen"
   },
   "btnAddCurrent": {
-    "message": "Aktuelle Seite hinzufügen"
+    "message": "Die gerade geöffnete Seite hinzufügen"
   },
   "btnExportCsv": {
     "message": "CSV exportieren"
@@ -479,9 +464,6 @@
         "example": "/preise/"
       }
     }
-  },
-  "checklistAllPages": {
-    "message": "Alle Seiten"
   },
   "csvHeader": {
     "message": "#,Pfad,Ergebnis,Notiz,URL links,URL rechts"
@@ -554,9 +536,6 @@
   },
   "overlayHelp": {
     "message": "Legt ein Bild der einen Seite über die andere, damit Unterschiede auffallen. Das Bild wird aktualisiert, wenn das Scrollen stoppt."
-  },
-  "overlayPanelHelp": {
-    "message": "Ein Bild der anderen Seite, über dieser Seite."
   },
   "overlayPermissionHelp": {
     "message": "Chrome erlaubt Erweiterungen nur mit Zugriff auf alle Sites, ein Bild eines Tabs aufzunehmen. Das Overlay fragt daher einmal danach. Das Bild bleibt im Browser."
@@ -677,5 +656,144 @@
   },
   "suggestResetDone": {
     "message": "Abgelehnte Paare werden wieder vorgeschlagen."
+  },
+  "quickToolsLabel": {
+    "message": "Vergleichswerkzeuge"
+  },
+  "quickWidths": {
+    "message": "Breiten"
+  },
+  "quickInspect": {
+    "message": "CSS"
+  },
+  "stateOn": {
+    "message": "An"
+  },
+  "stateOff": {
+    "message": "Aus"
+  },
+  "compareNeedSync": {
+    "message": "Starte die Synchronisierung, um Overlay und CSS-Unterschiede zu nutzen."
+  },
+  "presetMobile": {
+    "message": "Mobil"
+  },
+  "presetTablet": {
+    "message": "Tablet"
+  },
+  "presetLaptopSmall": {
+    "message": "Klein"
+  },
+  "presetLaptop": {
+    "message": "Laptop"
+  },
+  "presetDesktop": {
+    "message": "Desktop"
+  },
+  "btnRestoreWindow": {
+    "message": "Ursprüngliche Fenstergröße wiederherstellen"
+  },
+  "restoreWindowDone": {
+    "message": "Das Fenster hat wieder seine ursprüngliche Größe."
+  },
+  "paneWidthThisSide": {
+    "message": "Breite dieser Hälfte"
+  },
+  "presetLimitedHere": {
+    "message": "Nicht genug Platz auf dem Bildschirm: Diese Hälfte ist $WIDTH$ px breit.",
+    "placeholders": {
+      "width": {
+        "content": "$1",
+        "example": "1180"
+      }
+    }
+  },
+  "overlayDeferred": {
+    "message": "Das Overlay erscheint, sobald du dieses Pop-up schließt (Chrome schließt das Pop-up, während die andere Hälfte aufgenommen wird)."
+  },
+  "sectionSyncOptions": {
+    "message": "Sync-Optionen"
+  },
+  "checklistIntro": {
+    "message": "Gehe eine Liste von Seiten auf beiden Websites durch, zum Beispiel alt und neu. Für jede Seite hältst du fest, ob sie stimmt. Die Liste wird für dieses Website-Paar gespeichert."
+  },
+  "checklistStep1": {
+    "message": "Füge die Seiten hinzu, die du prüfen willst (unten)."
+  },
+  "checklistStep2": {
+    "message": "Klicke auf Start: Beide Hälften öffnen die erste Seite."
+  },
+  "checklistStep3": {
+    "message": "Wähle Stimmt, Weicht ab oder Überspringen. Die nächste Seite öffnet sich von selbst."
+  },
+  "checklistQuestion": {
+    "message": "Stimmt diese Seite auf beiden Seiten?"
+  },
+  "btnMarkOk": {
+    "message": "Stimmt"
+  },
+  "btnMarkFail": {
+    "message": "Weicht ab"
+  },
+  "btnMarkSkip": {
+    "message": "Überspringen"
+  },
+  "checklistMarkHint": {
+    "message": "Stimmt und Überspringen öffnen die nächste Seite. Bei Weicht ab kannst du zuerst eine Notiz schreiben."
+  },
+  "checklistAddTitle": {
+    "message": "Seiten hinzufügen"
+  },
+  "checklistPasteToggle": {
+    "message": "Mehrere Pfade oder URLs einfügen"
+  },
+  "btnChecklistStart": {
+    "message": "Prüfung starten"
+  },
+  "btnChecklistStartCount": {
+    "message": "Start: Seite 1 von $COUNT$ öffnen",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "12"
+      }
+    }
+  },
+  "btnChecklistContinue": {
+    "message": "Mit der nächsten Seite weitermachen"
+  },
+  "btnChecklistRestart": {
+    "message": "Von Seite 1 neu beginnen"
+  },
+  "checklistDoneAll": {
+    "message": "Fertig: Alle $COUNT$ Seiten stimmen.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "12"
+      }
+    }
+  },
+  "checklistDoneFails": {
+    "message": "Fertig: $COUNT$ Seiten geprüft, $FAILS$ weichen ab. Exportiere die Liste unten.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "12"
+      },
+      "fails": {
+        "content": "$2",
+        "example": "2"
+      }
+    }
+  },
+  "checklistAllPagesCount": {
+    "message": "Seiten ($COUNT$)",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "12"
+      }
+    }
   }
 }

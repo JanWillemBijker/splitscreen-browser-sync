@@ -164,9 +164,6 @@
   "pillError": {
     "message": "Reageert niet"
   },
-  "sectionOptions": {
-    "message": "Opties"
-  },
   "sectionOffset": {
     "message": "Scroll-offset"
   },
@@ -305,11 +302,8 @@
   "paneSizesHelp": {
     "message": "Chrome heeft geen instelling voor de scheidingslijn. Een voorinstelling past daarom het venster aan tot de gekozen helft die breedte heeft. De andere helft verandert mee."
   },
-  "paneSizeUnknown": {
-    "message": "onbekend"
-  },
   "presetSideLabel": {
-    "message": "Helft om aan te passen"
+    "message": "Welke helft?"
   },
   "presetGroupLabel": {
     "message": "Breedte-voorinstellingen"
@@ -352,14 +346,8 @@
   "tabChecklist": {
     "message": "Checklist"
   },
-  "checklistHelp": {
-    "message": "Paden om één voor één op beide sites te controleren. Bewaard voor dit paar sites."
-  },
-  "checklistEmpty": {
-    "message": "Nog geen pagina's. Plak hieronder paden of URL's, of voeg de huidige pagina toe."
-  },
   "checklistProgress": {
-    "message": "$DONE$ van $TOTAL$ gecontroleerd",
+    "message": "$DONE$ van $TOTAL$ pagina’s bekeken",
     "placeholders": {
       "done": {
         "content": "$1",
@@ -372,7 +360,7 @@
     }
   },
   "checklistFailCount": {
-    "message": "$COUNT$ fout",
+    "message": "$COUNT$ wijken af",
     "placeholders": {
       "count": {
         "content": "$1",
@@ -393,9 +381,6 @@
       }
     }
   },
-  "checklistNoCurrent": {
-    "message": "Klik op Volgende om de eerste pagina in beide helften te openen."
-  },
   "checklistNeedSync": {
     "message": "Start de sync één keer zodat beide sites bekend zijn; daarna opent Vorige/Volgende de pagina's."
   },
@@ -406,13 +391,13 @@
     "message": "Volgende"
   },
   "statusOk": {
-    "message": "Goed"
+    "message": "Klopt"
   },
   "statusFail": {
-    "message": "Fout"
+    "message": "Wijkt af"
   },
   "statusNa": {
-    "message": "N.v.t."
+    "message": "Overgeslagen"
   },
   "statusOpen": {
     "message": "Niet gecontroleerd"
@@ -421,10 +406,10 @@
     "message": "Resultaat voor deze pagina"
   },
   "checklistNote": {
-    "message": "Notitie"
+    "message": "Notitie (optioneel)"
   },
   "checklistNotePlaceholder": {
-    "message": "Wat is er anders?"
+    "message": "Wat wijkt af?"
   },
   "checklistPastePlaceholder": {
     "message": "/prijzen/\n/contact/\nhttps://example.com/over-ons/"
@@ -436,7 +421,7 @@
     "message": "Toevoegen"
   },
   "btnAddCurrent": {
-    "message": "Huidige pagina toevoegen"
+    "message": "Voeg de pagina toe die nu open staat"
   },
   "btnExportCsv": {
     "message": "CSV exporteren"
@@ -479,9 +464,6 @@
         "example": "/pricing/"
       }
     }
-  },
-  "checklistAllPages": {
-    "message": "Alle pagina's"
   },
   "csvHeader": {
     "message": "#,Pad,Resultaat,Notitie,URL links,URL rechts"
@@ -554,9 +536,6 @@
   },
   "overlayHelp": {
     "message": "Legt een afbeelding van de ene kant over de andere kant, zodat verschillen opvallen. De afbeelding wordt ververst zodra je stopt met scrollen."
-  },
-  "overlayPanelHelp": {
-    "message": "Een afbeelding van de andere kant, over deze kant heen."
   },
   "overlayPermissionHelp": {
     "message": "Chrome laat een extensie alleen een afbeelding van een tabblad maken met toegang tot alle sites. De overlay vraagt daar daarom één keer om. De afbeelding blijft in je browser."
@@ -677,5 +656,144 @@
   },
   "suggestResetDone": {
     "message": "Weggeklikte paren worden weer voorgesteld."
+  },
+  "quickToolsLabel": {
+    "message": "Vergelijktools"
+  },
+  "quickWidths": {
+    "message": "Breedtes"
+  },
+  "quickInspect": {
+    "message": "CSS"
+  },
+  "stateOn": {
+    "message": "Aan"
+  },
+  "stateOff": {
+    "message": "Uit"
+  },
+  "compareNeedSync": {
+    "message": "Start de sync om de overlay en CSS-verschillen te gebruiken."
+  },
+  "presetMobile": {
+    "message": "Mobiel"
+  },
+  "presetTablet": {
+    "message": "Tablet"
+  },
+  "presetLaptopSmall": {
+    "message": "Klein"
+  },
+  "presetLaptop": {
+    "message": "Laptop"
+  },
+  "presetDesktop": {
+    "message": "Desktop"
+  },
+  "btnRestoreWindow": {
+    "message": "Oorspronkelijke venstergrootte terug"
+  },
+  "restoreWindowDone": {
+    "message": "Het venster heeft weer de oorspronkelijke grootte."
+  },
+  "paneWidthThisSide": {
+    "message": "Breedte van deze helft"
+  },
+  "presetLimitedHere": {
+    "message": "Niet genoeg ruimte op het scherm: deze helft is $WIDTH$ px breed.",
+    "placeholders": {
+      "width": {
+        "content": "$1",
+        "example": "1180"
+      }
+    }
+  },
+  "overlayDeferred": {
+    "message": "De overlay verschijnt zodra je deze popup sluit (Chrome sluit de popup terwijl de andere helft wordt vastgelegd)."
+  },
+  "sectionSyncOptions": {
+    "message": "Sync-opties"
+  },
+  "checklistIntro": {
+    "message": "Loop een lijst pagina’s na op beide sites, bijvoorbeeld oud en nieuw. Per pagina geef je aan of het klopt. De lijst wordt bewaard voor dit paar sites."
+  },
+  "checklistStep1": {
+    "message": "Voeg de pagina’s toe die je wilt nalopen (hieronder)."
+  },
+  "checklistStep2": {
+    "message": "Klik op Start: beide helften openen de eerste pagina."
+  },
+  "checklistStep3": {
+    "message": "Kies Klopt, Wijkt af of Overslaan. De volgende pagina opent vanzelf."
+  },
+  "checklistQuestion": {
+    "message": "Klopt deze pagina aan beide kanten?"
+  },
+  "btnMarkOk": {
+    "message": "Klopt"
+  },
+  "btnMarkFail": {
+    "message": "Wijkt af"
+  },
+  "btnMarkSkip": {
+    "message": "Overslaan"
+  },
+  "checklistMarkHint": {
+    "message": "Klopt en Overslaan openen de volgende pagina. Bij Wijkt af kun je eerst een notitie schrijven."
+  },
+  "checklistAddTitle": {
+    "message": "Pagina’s toevoegen"
+  },
+  "checklistPasteToggle": {
+    "message": "Meerdere paden of URL’s plakken"
+  },
+  "btnChecklistStart": {
+    "message": "Start controle"
+  },
+  "btnChecklistStartCount": {
+    "message": "Start: open pagina 1 van $COUNT$",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "12"
+      }
+    }
+  },
+  "btnChecklistContinue": {
+    "message": "Verder met de volgende pagina"
+  },
+  "btnChecklistRestart": {
+    "message": "Opnieuw beginnen bij pagina 1"
+  },
+  "checklistDoneAll": {
+    "message": "Klaar: alle $COUNT$ pagina’s kloppen.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "12"
+      }
+    }
+  },
+  "checklistDoneFails": {
+    "message": "Klaar: $COUNT$ pagina’s bekeken, $FAILS$ wijken af. Exporteer de lijst hieronder.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "12"
+      },
+      "fails": {
+        "content": "$2",
+        "example": "2"
+      }
+    }
+  },
+  "checklistAllPagesCount": {
+    "message": "Pagina’s ($COUNT$)",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "12"
+      }
+    }
   }
 }

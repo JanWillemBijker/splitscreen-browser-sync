@@ -9,6 +9,7 @@ const MSG = Object.freeze({
   POPUP_SET_GROUP_OPTION: 'SVSS_POPUP_SET_GROUP_OPTION',
   POPUP_SET_GROUP_CHOICE: 'SVSS_POPUP_SET_GROUP_CHOICE',
   POPUP_SET_PANE_WIDTH: 'SVSS_POPUP_SET_PANE_WIDTH',
+  POPUP_RESTORE_WINDOW: 'SVSS_POPUP_RESTORE_WINDOW',
   POPUP_INSPECT_SET: 'SVSS_POPUP_INSPECT_SET',
   POPUP_OVERLAY_SET: 'SVSS_POPUP_OVERLAY_SET',
   POPUP_OVERLAY_REFRESH: 'SVSS_POPUP_OVERLAY_REFRESH',
@@ -84,6 +85,10 @@ function localize() {
   for (const el of document.querySelectorAll('[data-i18n-aria]')) {
     const text = t(el.dataset.i18nAria);
     if (text) el.setAttribute('aria-label', text);
+  }
+  for (const el of document.querySelectorAll('[data-i18n-title]')) {
+    const text = t(el.dataset.i18nTitle);
+    if (text) el.title = text;
   }
   for (const el of document.querySelectorAll('[data-i18n-placeholder]')) {
     const text = t(el.dataset.i18nPlaceholder);
@@ -233,7 +238,9 @@ function renderStatus(status) {
 
   for (const el of document.querySelectorAll('[data-needs-pair]')) el.hidden = !inSplit;
   for (const el of document.querySelectorAll('[data-need-pair-hint]')) el.hidden = inSplit;
-  renderPaneSizes(group.paneSizes || {});
+  renderPaneSizes(group.paneSizes || {}, status?.activeSide);
+  $('restoreWindow').hidden = !group.canRestoreWindow;
+  renderQuickTools(inSplit, group);
   if (inSplit && currentTab() === 'checklist') loadChecklist();
   renderOverlay(group);
   $('inspectOn').checked = Boolean(group.inspect);
@@ -246,12 +253,46 @@ function renderStatus(status) {
 }
 
 function formatSize(size) {
-  return size && size.w && size.h ? `${size.w} × ${size.h}` : t('paneSizeUnknown');
+  return size && size.w ? String(size.w) : '';
 }
 
-function renderPaneSizes(sizes) {
+let presetSideChosen = false;
+
+function presetSide() {
+  return document.querySelector('input[name="presetSide"]:checked')?.value === 'right' ? 'right' : 'left';
+}
+
+function renderPaneSizes(sizes, activeSide) {
   $('sizeLeft').textContent = formatSize(sizes.left);
   $('sizeRight').textContent = formatSize(sizes.right);
+  // Preselect the pane the user is working in, until they pick a side.
+  if (!presetSideChosen && (activeSide === 'left' || activeSide === 'right')) {
+    for (const radio of document.querySelectorAll('input[name="presetSide"]')) radio.checked = radio.value === activeSide;
+  }
+  const size = sizes[presetSide()];
+  for (const button of document.querySelectorAll('[data-preset]')) {
+    const active = Boolean(size && Math.abs(size.w - Number(button.dataset.preset)) <= 1);
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+  }
+}
+
+// Shortcut row under the status: widths (opens the Compare tab), overlay and
+// CSS differences (switch on/off).
+function renderQuickTools(inSplit, group) {
+  $('quickTools').hidden = !inSplit;
+  if (!inSplit) return;
+  const enabled = Boolean(group.enabled);
+  const sizes = group.paneSizes || {};
+  $('quickWidthsState').textContent = [sizes.left?.w, sizes.right?.w].every(Boolean) ? `${sizes.left.w} · ${sizes.right.w}` : '';
+  const overlayOn = Boolean(group.overlay?.on);
+  $('quickOverlay').setAttribute('aria-pressed', overlayOn ? 'true' : 'false');
+  $('quickOverlayState').textContent = t(overlayOn ? 'stateOn' : 'stateOff');
+  $('quickInspect').setAttribute('aria-pressed', group.inspect ? 'true' : 'false');
+  $('quickInspectState').textContent = t(group.inspect ? 'stateOn' : 'stateOff');
+  for (const id of ['quickOverlay', 'quickInspect']) {
+    $(id).disabled = !enabled;
+    $(id).title = enabled ? '' : t('compareNeedSync');
+  }
 }
 
 async function run(message) {
@@ -338,9 +379,10 @@ for (const button of document.querySelectorAll('[data-preset]')) {
     if (busy) return;
     busy = true;
     root.setAttribute('aria-busy', 'true');
-    const side = document.querySelector('input[name="presetSide"]:checked')?.value === 'right' ? 'right' : 'left';
+    const side = presetSide();
     const result = $('presetResult');
     result.textContent = '';
+    button.setAttribute('aria-busy', 'true');
     try {
       const response = await sendMessage({ type: MSG.POPUP_SET_PANE_WIDTH, side, width: Number(button.dataset.preset) });
       if (response?.status) renderStatus(response.status);
@@ -349,10 +391,46 @@ for (const button of document.querySelectorAll('[data-preset]')) {
       else result.textContent = t(response.reached ? 'presetReached' : 'presetLimited', [sideText, String(response.width)]);
     } finally {
       busy = false;
+      button.removeAttribute('aria-busy');
       root.removeAttribute('aria-busy');
     }
   });
 }
+
+for (const radio of document.querySelectorAll('input[name="presetSide"]')) {
+  radio.addEventListener('change', () => {
+    presetSideChosen = true;
+    renderPaneSizes(lastStatus?.group?.paneSizes || {}, null);
+  });
+}
+
+$('restoreWindow').addEventListener('click', async () => {
+  const response = await sendMessage({ type: MSG.POPUP_RESTORE_WINDOW });
+  if (response?.status) renderStatus(response.status);
+  $('presetResult').textContent = response?.ok ? t('restoreWindowDone') : t('presetFailed');
+});
+
+$('quickWidths').addEventListener('click', () => selectTab('compare'));
+
+$('quickInspect').addEventListener('click', () => {
+  run({ type: MSG.POPUP_INSPECT_SET, value: !lastStatus?.group?.inspect });
+});
+
+$('quickOverlay').addEventListener('click', async () => {
+  const on = !lastStatus?.group?.overlay?.on;
+  if (on && !capturePermission) {
+    // Needs the permission first (asked from this click); then switch on.
+    let granted = false;
+    try { granted = await chrome.permissions.request(CAPTURE_PERMISSION); } catch (_error) { granted = false; }
+    await refreshCapturePermission();
+    if (!granted) {
+      selectTab('compare');
+      $('overlayResult').textContent = t('overlayDeclined');
+      return;
+    }
+  }
+  await setOverlay({ on });
+});
 
 // ---- Overlay --------------------------------------------------------------------
 // Capturing a tab needs the optional '<all_urls>' permission. It is requested
@@ -391,7 +469,10 @@ function renderOverlay(group) {
 async function setOverlay(patch) {
   const response = await sendMessage({ type: MSG.POPUP_OVERLAY_SET, overlay: patch });
   if (response?.status) renderStatus(response.status);
-  $('overlayResult').textContent = response && response.ok === false && response.reason === 'permission' ? t('overlayDeclined') : '';
+  let note = '';
+  if (response && response.ok === false && response.reason === 'permission') note = t('overlayDeclined');
+  else if (response?.deferred) note = t('overlayDeferred');
+  $('overlayResult').textContent = note;
   return response;
 }
 
@@ -583,6 +664,7 @@ $('clearHistory').addEventListener('click', async () => {
 let checklist = null;
 let noteTimer = null;
 let clearArmed = false;
+let pasteTouched = false;
 const STATUS_KEYS = { ok: 'statusOk', fail: 'statusFail', na: 'statusNa' };
 
 function hostOf(origin) {
@@ -601,13 +683,16 @@ function renderChecklist(data) {
   const index = Number.isInteger(c.index) ? c.index : -1;
   const done = items.filter((item) => item.status).length;
   const fails = items.filter((item) => item.status === 'fail').length;
+  const allDone = items.length > 0 && done === items.length;
+  const current = items[index] || null;
 
   $('checklistOrigins').textContent = [hostOf(c.leftOrigin), hostOf(c.rightOrigin)].filter(Boolean).join(' ↔ ');
-  $('checklistEmpty').hidden = items.length > 0;
+  // The how-to steps stay until the first page has been checked.
+  $('checklistSteps').hidden = done > 0;
   $('checklistProgressWrap').hidden = !items.length;
-  $('checklistCurrent').hidden = !items.length;
+  $('checklistCurrent').hidden = !current || !c.canNavigate;
   $('checklistListWrap').hidden = !items.length;
-  $('checklistExport').hidden = !items.length;
+  $('checklistExport').hidden = !done;
 
   $('checklistProgress').textContent = t('checklistProgress', [String(done), String(items.length)]);
   $('checklistFails').textContent = fails ? t('checklistFailCount', [String(fails)]) : '';
@@ -617,13 +702,30 @@ function renderChecklist(data) {
   bar.setAttribute('aria-valuetext', $('checklistProgress').textContent);
   $('checklistBarFill').style.width = items.length ? `${Math.round((done / items.length) * 100)}%` : '0';
 
-  const current = items[index] || null;
-  $('checklistPos').textContent = current ? t('checklistPosition', [String(index + 1), String(items.length)]) : '';
-  $('checklistPath').textContent = current ? current.path : '';
-  $('checklistPath').hidden = !current;
-  const hint = !c.canNavigate ? t('checklistNeedSync') : (current ? '' : t('checklistNoCurrent'));
+  $('checklistDone').hidden = !allDone;
+  $('checklistDone').textContent = allDone
+    ? (fails ? t('checklistDoneFails', [String(items.length), String(fails)]) : t('checklistDoneAll', [String(items.length)]))
+    : '';
+
+  const hint = items.length && !c.canNavigate ? t('checklistNeedSync') : '';
   $('checklistHint').textContent = hint;
   $('checklistHint').hidden = !hint;
+
+  // Start / continue button when no page is open yet (or the list is done).
+  const start = $('checklistStart');
+  const showStart = items.length > 0 && c.canNavigate && (!current || allDone);
+  start.hidden = !showStart;
+  if (showStart) {
+    if (allDone) start.textContent = t('btnChecklistRestart');
+    else if (done) start.textContent = t('btnChecklistContinue');
+    else start.textContent = t('btnChecklistStartCount', [String(items.length)]);
+    start.classList.toggle('btn-primary', !allDone);
+    start.classList.toggle('btn-secondary', allDone);
+  }
+
+  $('checklistPos').textContent = current ? t('checklistPosition', [String(index + 1), String(items.length)]) : '';
+  $('checklistPath').textContent = current ? current.path : '';
+  $('checklistPath').title = current ? current.path : '';
   $('checklistPrev').disabled = !c.canNavigate || index <= 0;
   $('checklistNext').disabled = !c.canNavigate || index >= items.length - 1;
   for (const chip of document.querySelectorAll('#checklistStatus .chip')) {
@@ -633,7 +735,10 @@ function renderChecklist(data) {
   const note = $('checklistNote');
   note.disabled = !current;
   if (document.activeElement !== note) note.value = current ? current.note || '' : '';
+  // The note is mainly for pages that differ.
+  $('checklistNoteWrap').classList.toggle('field-note-fail', current?.status === 'fail');
 
+  $('checklistListTitle').textContent = t('checklistAllPagesCount', [String(items.length)]);
   const list = $('checklistList');
   const focusedIndex = document.activeElement?.closest?.('.check-item')?.dataset.index ?? null;
   const focusedRole = document.activeElement?.dataset?.role || null;
@@ -643,16 +748,26 @@ function renderChecklist(data) {
     li.className = 'check-item';
     li.dataset.index = String(i);
     if (i === index) li.setAttribute('aria-current', 'step');
-    const dot = document.createElement('span');
-    dot.className = 'check-dot';
-    if (item.status) dot.dataset.status = item.status;
-    dot.setAttribute('role', 'img');
-    dot.setAttribute('aria-label', t(item.status ? STATUS_KEYS[item.status] : 'statusOpen'));
+    const mark = document.createElement('span');
+    mark.className = 'check-mark';
+    if (item.status) mark.dataset.status = item.status;
+    mark.textContent = item.status === 'ok' ? '✓' : item.status === 'fail' ? '✗' : item.status === 'na' ? '–' : '';
+    mark.setAttribute('role', 'img');
+    mark.setAttribute('aria-label', t(item.status ? STATUS_KEYS[item.status] : 'statusOpen'));
     const open = document.createElement('button');
     open.type = 'button';
     open.className = 'check-open';
     open.dataset.role = 'open';
-    open.textContent = item.path;
+    const pathText = document.createElement('span');
+    pathText.className = 'check-path';
+    pathText.textContent = item.path;
+    open.appendChild(pathText);
+    if (item.note) {
+      const noteText = document.createElement('span');
+      noteText.className = 'check-note';
+      noteText.textContent = item.note;
+      open.appendChild(noteText);
+    }
     open.title = item.note ? `${item.path} · ${item.note}` : item.path;
     open.setAttribute('aria-label', t('checklistOpen', [item.path]));
     open.disabled = !c.canNavigate;
@@ -662,9 +777,10 @@ function renderChecklist(data) {
     remove.className = 'check-remove';
     remove.dataset.role = 'remove';
     remove.setAttribute('aria-label', t('checklistRemove', [item.path]));
+    remove.title = t('checklistRemove', [item.path]);
     remove.appendChild(crossIcon());
     remove.addEventListener('click', () => checklistCall({ type: MSG.POPUP_CHECKLIST_REMOVE, index: i, path: item.path }));
-    li.append(dot, open, remove);
+    li.append(mark, open, remove);
     list.appendChild(li);
   });
   if (focusedIndex !== null && focusedRole) {
@@ -672,6 +788,17 @@ function renderChecklist(data) {
       || list.querySelector(`.check-item:last-child [data-role="${focusedRole}"]`);
     if (again) again.focus();
   }
+  // Keep the current page visible inside the list (without scrolling the tab).
+  const currentRow = list.querySelector('.check-item[aria-current]');
+  if (currentRow) {
+    const top = currentRow.offsetTop;
+    if (top < list.scrollTop || top + currentRow.offsetHeight > list.scrollTop + list.clientHeight) {
+      list.scrollTop = Math.max(0, top - list.clientHeight / 2);
+    }
+  }
+
+  // Open the paste box when the list is still empty.
+  if (!items.length && !pasteTouched) $('checklistPasteWrap').open = true;
 }
 
 function crossIcon() {
@@ -703,13 +830,24 @@ function currentChecklistIndex() {
 $('checklistPrev').addEventListener('click', () => checklistCall({ type: MSG.POPUP_CHECKLIST_GO, step: -1 }));
 $('checklistNext').addEventListener('click', () => checklistCall({ type: MSG.POPUP_CHECKLIST_GO, step: 1 }));
 
+$('checklistStart').addEventListener('click', () => checklistCall({ type: MSG.POPUP_CHECKLIST_GO, firstOpen: true }));
+$('checklistPasteWrap').addEventListener('toggle', () => { pasteTouched = true; });
+
+// "Looks right" and "Skip" mark the page and open the next one still to
+// check; "Differs" stays on the page so a note can be written.
 for (const chip of document.querySelectorAll('#checklistStatus .chip')) {
-  chip.addEventListener('click', () => {
+  chip.addEventListener('click', async () => {
     const index = currentChecklistIndex();
     const item = checklist?.items?.[index];
     if (!item) return;
     const status = item.status === chip.dataset.status ? null : chip.dataset.status;
-    checklistCall({ type: MSG.POPUP_CHECKLIST_UPDATE, index, path: item.path, status });
+    const advance = status === 'ok' || status === 'na';
+    if (noteTimer) {
+      clearTimeout(noteTimer);
+      noteTimer = null;
+    }
+    await checklistCall({ type: MSG.POPUP_CHECKLIST_UPDATE, index, path: item.path, status, note: $('checklistNote').value, advance });
+    if (status === 'fail') $('checklistNote').focus();
   });
 }
 
