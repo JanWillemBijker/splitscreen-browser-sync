@@ -65,7 +65,7 @@ No data is sent to BijBijker or any other third party. Data only moves between t
 
 ### Contact
 
-Questions about this policy: via https://bijbijker.nl.
+Questions about this policy: janwillem@bijbijker.nl or via https://bijbijker.nl.
 
 ---
 
@@ -128,4 +128,4 @@ Er worden geen gegevens naar BijBijker of andere derden gestuurd. Gegevens gaan 
 
 ### Contact
 
-Vragen over dit beleid: via https://bijbijker.nl.
+Vragen over dit beleid: janwillem@bijbijker.nl of via https://bijbijker.nl.
